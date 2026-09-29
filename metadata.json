@@ -1,0 +1,6 @@
+{
+  "name": "ChromaForge: Blender + Ollama Multi-Material 3D Studio",
+  "description": "AI-assisted 3D modeling and multi-material slicing optimizer connecting Ollama, Blender, and Anycubic Kobra 3 / Kobra X multi-color 3D printing.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
