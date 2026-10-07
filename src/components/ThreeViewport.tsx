@@ -206,6 +206,24 @@ export const ThreeViewport: React.FC<ThreeViewportProps> = ({
   const [bleedSimulationMode, setBleedSimulationMode] = useState<boolean>(false);
   const [simulatedPurgeRatio, setSimulatedPurgeRatio] = useState<number>(slicingConfig.flushingMultiplier || 1.0);
 
+  const filamentById = useMemo(
+    () => new Map(filaments.map(f => [f.id, f])),
+    [filaments]
+  );
+
+  const activeFilamentCount = useMemo(
+    () => filaments.filter(f => f.slotActive !== false).length,
+    [filaments]
+  );
+
+  const bleedRiskBySlot = useMemo(() => {
+    const riskMap = new Map<number, BleedRiskItem>();
+    for (const br of slicingAnalysis.bleedRisks) {
+      riskMap.set(br.toSlot, br);
+    }
+    return riskMap;
+  }, [slicingAnalysis.bleedRisks]);
+
   // Interaction state
   const isDraggingRef = useRef<boolean>(false);
   const previousMousePositionRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
@@ -507,14 +525,8 @@ export const ThreeViewport: React.FC<ThreeViewportProps> = ({
 
     const modelGroup = new THREE.Group();
 
-    // Map of bleed risks by segment to highlight contamination
-    const bleedRiskBySlot = new Map<number, BleedRiskItem>();
-    slicingAnalysis.bleedRisks.forEach(br => {
-      bleedRiskBySlot.set(br.toSlot, br);
-    });
-
     model.segments.forEach((seg, sIdx) => {
-      const fil = filaments.find(f => f.id === seg.filamentId) || filaments[0];
+      const fil = filamentById.get(seg.filamentId) || filamentById.get(1) || filaments[0];
       const isSelected = seg.id === selectedSegmentId;
 
       let geo: THREE.BufferGeometry;
@@ -641,7 +653,19 @@ export const ThreeViewport: React.FC<ThreeViewportProps> = ({
 
     scene.add(modelGroup);
     modelGroupRef.current = modelGroup;
-  }, [model, filaments, selectedSegmentId, wireframe, isSlicingActive, bleedSimulationMode, simulatedPurgeRatio, slicingAnalysis.bleedRisks]);
+  }, [
+    model,
+    filaments,
+    filamentById,
+    selectedSegmentId,
+    wireframe,
+    isSlicingActive,
+    bleedSimulationMode,
+    simulatedPurgeRatio,
+    slicingAnalysis.bleedRisks,
+    bleedRiskBySlot,
+    natureShadingMode,
+  ]);
 
   // 5. Update Clipping Plane Height
   useEffect(() => {
@@ -751,7 +775,7 @@ export const ThreeViewport: React.FC<ThreeViewportProps> = ({
           <span className="text-slate-500" aria-hidden="true">·</span>
           <span className="text-slate-400 font-mono tabular-nums">{printer.bedX}×{printer.bedY}×{printer.bedZ}mm</span>
           <span className="text-slate-500" aria-hidden="true">·</span>
-          <span className="text-cyan-400 font-mono">{filaments.filter(f => f.slotActive).length} Slots Active</span>
+          <span className="text-cyan-400 font-mono">{activeFilamentCount} Slots Active</span>
         </div>
 
         <div className="pointer-events-auto flex items-center gap-1.5 bg-slate-900/80 backdrop-blur-md p-1 rounded-lg border border-slate-700/60 shadow-lg">
@@ -871,7 +895,7 @@ export const ThreeViewport: React.FC<ThreeViewportProps> = ({
 
       {/* BLEED SIMULATION INTERACTIVE HUD OVERLAY */}
       {bleedSimulationMode && (
-        <div className="absolute bottom-4 left-4 right-4 max-w-xl mx-auto pointer-events-auto bg-slate-900/95 backdrop-blur-md p-3.5 rounded-xl border border-amber-500/40 shadow-2xl z-20 flex flex-col gap-2.5">
+        <div className="absolute bottom-4 left-4 right-4 max-w-xl mx-auto pointer-events-auto bg-slate-900/95 backdrop-blur-md p-3.5 rounded-xl border border-amber-500/40 shadow-2xl z-20 flex flex-col gap-3">
           <div className="flex items-center justify-between text-xs border-b border-slate-800 pb-2">
             <div className="flex items-center gap-2">
               <ShieldAlert className="w-4 h-4 text-amber-400 shrink-0" />
@@ -939,7 +963,7 @@ export const ThreeViewport: React.FC<ThreeViewportProps> = ({
                       risk.bleedSeverity === 'critical' ? 'bg-red-500 animate-pulse' : 'bg-amber-400'
                     }`} />
                     <span className="font-mono text-slate-400">L{risk.layer} ({risk.heightMm}mm):</span>
-                    
+
                     {/* Color From -> Mixed -> To Swatches */}
                     <div className="flex items-center gap-1">
                       <span className="w-3 h-3 rounded-full border border-white/20" style={{ backgroundColor: risk.fromColor }} title="Preceding Color" />

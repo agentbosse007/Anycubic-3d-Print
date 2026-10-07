@@ -11,24 +11,44 @@ export function getLuminance(hex: string): number {
   return 0.299 * r + 0.587 * g + 0.114 * b;
 }
 
+export interface ParsedColor {
+  r: number;
+  g: number;
+  b: number;
+  luminance: number;
+}
+
+const parsedColorCache = new Map<string, ParsedColor>();
+
+export function parseHexColor(hex: string): ParsedColor {
+  const key = hex.toLowerCase();
+  const cached = parsedColorCache.get(key);
+  if (cached) {
+    return cached;
+  }
+
+  const cleanHex = key.replace('#', '');
+  const r = parseInt(cleanHex.substring(0, 2), 16) || 0;
+  const g = parseInt(cleanHex.substring(2, 4), 16) || 0;
+  const b = parseInt(cleanHex.substring(4, 6), 16) || 0;
+  const luminance = 0.299 * r + 0.587 * g + 0.114 * b;
+  const parsed = { r, g, b, luminance };
+  parsedColorCache.set(key, parsed);
+  return parsed;
+}
+
 /**
  * Linearly interpolates two hex colors
  * ratio = 0.0 -> colorA, ratio = 1.0 -> colorB
  */
 export function blendHexColors(colorA: string, colorB: string, ratio: number): string {
   const clampedRatio = Math.max(0, Math.min(1, ratio));
-  const cA = colorA.replace('#', '');
-  const cB = colorB.replace('#', '');
-  const rA = parseInt(cA.substring(0, 2), 16) || 0;
-  const gA = parseInt(cA.substring(2, 4), 16) || 0;
-  const bA = parseInt(cA.substring(4, 6), 16) || 0;
-  const rB = parseInt(cB.substring(0, 2), 16) || 0;
-  const gB = parseInt(cB.substring(2, 4), 16) || 0;
-  const bB = parseInt(cB.substring(4, 6), 16) || 0;
+  const cA = parseHexColor(colorA);
+  const cB = parseHexColor(colorB);
 
-  const r = Math.round(rA * (1 - clampedRatio) + rB * clampedRatio);
-  const g = Math.round(gA * (1 - clampedRatio) + gB * clampedRatio);
-  const b = Math.round(bA * (1 - clampedRatio) + bB * clampedRatio);
+  const r = Math.round(cA.r * (1 - clampedRatio) + cB.r * clampedRatio);
+  const g = Math.round(cA.g * (1 - clampedRatio) + cB.g * clampedRatio);
+  const b = Math.round(cA.b * (1 - clampedRatio) + cB.b * clampedRatio);
 
   return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
 }
@@ -46,8 +66,8 @@ export function calculateFlushVolume(
     return 0;
   }
 
-  const lumFrom = getLuminance(fromColor);
-  const lumTo = getLuminance(toColor);
+  const lumFrom = parseHexColor(fromColor).luminance;
+  const lumTo = parseHexColor(toColor).luminance;
   const lumDiff = (lumTo - lumFrom) / 255; // -1 to +1
 
   // Base flush volume in mm³
@@ -72,16 +92,18 @@ export function buildFlushMatrix(
   multiplier: number = 1.0
 ): number[][] {
   const matrix: number[][] = [];
-  for (let i = 0; i < filaments.length; i++) {
+  const activeFilaments = filaments.filter(f => f.slotActive !== false);
+
+  for (let i = 0; i < activeFilaments.length; i++) {
     const row: number[] = [];
-    for (let j = 0; j < filaments.length; j++) {
+    for (let j = 0; j < activeFilaments.length; j++) {
       if (i === j) {
         row.push(0);
       } else {
         const vol = calculateFlushVolume(
-          filaments[i].color,
-          filaments[j].color,
-          multiplier * filaments[j].purgeFactor
+          activeFilaments[i].color,
+          activeFilaments[j].color,
+          multiplier * activeFilaments[j].purgeFactor
         );
         row.push(vol);
       }
@@ -102,6 +124,16 @@ function getSegmentZBounds(segment: MeshSegment): { minZ: number; maxZ: number }
     minZ: Math.max(0, posZ - height / 2),
     maxZ: posZ + height / 2,
   };
+}
+
+/**
+ * Precomputes segment bounds once to reduce repeated geometry recalculation.
+ */
+function buildSegmentBoundMap(segments: MeshSegment[]) {
+  return segments.map(seg => ({
+    segment: seg,
+    bounds: getSegmentZBounds(seg),
+  }));
 }
 
 /**
@@ -130,11 +162,13 @@ export function analyzeMultiMaterialSlicing(
     };
   }
 
+  const activeFilaments = filaments.filter(f => f.slotActive !== false);
+  const boundsBySegment = buildSegmentBoundMap(segments);
+
   // Find total height
   let maxModelZ = 0;
-  for (const seg of segments) {
-    const bounds = getSegmentZBounds(seg);
-    if (bounds.maxZ > maxModelZ) maxModelZ = bounds.maxZ;
+  for (const entry of boundsBySegment) {
+    if (entry.bounds.maxZ > maxModelZ) maxModelZ = entry.bounds.maxZ;
   }
 
   const layerHeight = Math.max(0.08, config.layerHeight || 0.2);
@@ -146,29 +180,29 @@ export function analyzeMultiMaterialSlicing(
   let totalPurgeMm3 = 0;
   let toolChangesCount = 0;
 
-  // Build matrix once
-  const flushMatrix = buildFlushMatrix(filaments, config.flushingMultiplier);
+  // Build matrix once using active filaments only
+  const flushMatrix = buildFlushMatrix(activeFilaments, config.flushingMultiplier);
 
   // Scan every layer
   for (let l = 0; l < totalLayers; l++) {
     const currentZ = l * layerHeight;
     // Find all segments present at this layer height
-    const activeSegmentsAtLayer = segments.filter(seg => {
-      const bounds = getSegmentZBounds(seg);
-      return currentZ >= bounds.minZ && currentZ <= bounds.maxZ;
+    const activeSegmentsAtLayer = boundsBySegment.filter(entry => {
+      const { minZ, maxZ } = entry.bounds;
+      return currentZ >= minZ && currentZ <= maxZ;
     });
 
-    const activeFilamentIds = Array.from(new Set(activeSegmentsAtLayer.map(s => s.filamentId)));
+    const activeFilamentIds = Array.from(new Set(activeSegmentsAtLayer.map(({ segment }) => segment.filamentId)));
 
     if (activeFilamentIds.length > 1) {
       // Multi-color layer: requires color switches on this layer
       for (const slotId of activeFilamentIds) {
         if (slotId !== currentActiveFilament) {
-          const fromIdx = Math.max(0, Math.min(filaments.length - 1, currentActiveFilament - 1));
-          const toIdx = Math.max(0, Math.min(filaments.length - 1, slotId - 1));
+          const fromIdx = Math.max(0, Math.min(activeFilaments.length - 1, currentActiveFilament - 1));
+          const toIdx = Math.max(0, Math.min(activeFilaments.length - 1, slotId - 1));
           const flush = flushMatrix[fromIdx]?.[toIdx] || 240;
-          const fromFil = filaments[fromIdx];
-          const toFil = filaments[toIdx];
+          const fromFil = activeFilaments[fromIdx];
+          const toFil = activeFilaments[toIdx];
 
           totalPurgeMm3 += flush;
           toolChangesCount++;
@@ -181,8 +215,8 @@ export function analyzeMultiMaterialSlicing(
 
           // Evaluate color bleed risk
           if (fromFil && toFil) {
-            const lumFrom = getLuminance(fromFil.color);
-            const lumTo = getLuminance(toFil.color);
+            const lumFrom = parseHexColor(fromFil.color).luminance;
+            const lumTo = parseHexColor(toFil.color).luminance;
             const recommendedVol = calculateFlushVolume(fromFil.color, toFil.color, 1.15);
 
             // Dark to Light transition with insufficient flush
@@ -214,11 +248,11 @@ export function analyzeMultiMaterialSlicing(
     } else if (activeFilamentIds.length === 1 && activeFilamentIds[0] !== currentActiveFilament) {
       // Transition to next body layer
       const nextSlot = activeFilamentIds[0];
-      const fromIdx = Math.max(0, Math.min(filaments.length - 1, currentActiveFilament - 1));
-      const toIdx = Math.max(0, Math.min(filaments.length - 1, nextSlot - 1));
+      const fromIdx = Math.max(0, Math.min(activeFilaments.length - 1, currentActiveFilament - 1));
+      const toIdx = Math.max(0, Math.min(activeFilaments.length - 1, nextSlot - 1));
       const flush = flushMatrix[fromIdx]?.[toIdx] || 240;
-      const fromFil = filaments[fromIdx];
-      const toFil = filaments[toIdx];
+      const fromFil = activeFilaments[fromIdx];
+      const toFil = activeFilaments[toIdx];
 
       totalPurgeMm3 += flush;
       toolChangesCount++;
@@ -230,8 +264,8 @@ export function analyzeMultiMaterialSlicing(
       });
 
       if (fromFil && toFil) {
-        const lumFrom = getLuminance(fromFil.color);
-        const lumTo = getLuminance(toFil.color);
+        const lumFrom = parseHexColor(fromFil.color).luminance;
+        const lumTo = parseHexColor(toFil.color).luminance;
         const recommendedVol = calculateFlushVolume(fromFil.color, toFil.color, 1.15);
 
         if (lumTo > lumFrom + 35 && flush < recommendedVol) {
@@ -353,3 +387,4 @@ G1 X24 Y250 F12000
 ; Resume print path
 `;
 }
+
