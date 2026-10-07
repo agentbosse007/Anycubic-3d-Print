@@ -88,10 +88,12 @@ export default function App() {
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [isDownloading3mf, setIsDownloading3mf] = useState<boolean>(false);
 
+  const activeFilaments = useMemo(() => filaments.slice(0, maxColors), [filaments, maxColors]);
+
   // 4. Multi-Material Slicing Analysis
   const slicingAnalysis = useMemo(() => {
-    return analyzeMultiMaterialSlicing(currentModel.segments, filaments.slice(0, maxColors), slicingConfig);
-  }, [currentModel, filaments, maxColors, slicingConfig]);
+    return analyzeMultiMaterialSlicing(currentModel.segments, activeFilaments, slicingConfig);
+  }, [currentModel, activeFilaments, slicingConfig]);
 
   // 5. Handlers
   const handleUpdateFilament = (updated: FilamentChannel) => {
@@ -120,7 +122,7 @@ export default function App() {
   const handleExport3MF = async () => {
     try {
       setIsDownloading3mf(true);
-      const blob = await generateMultiColor3MF(currentModel, filaments.slice(0, maxColors), slicingConfig);
+      const blob = await generateMultiColor3MF(currentModel, activeFilaments, slicingConfig);
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -185,7 +187,7 @@ export default function App() {
           {/* Info Button: "Made by Bolorentzon 2026" */}
           <button
             onClick={() => setIsCreatorInfoOpen(true)}
-            className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 text-xs text-cyan-300 hover:text-white bg-slate-800/90 hover:bg-slate-750 rounded-lg border border-cyan-500/40 hover:border-cyan-400 transition-all shadow-sm whitespace-nowrap cursor-pointer group"
+            className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 text-xs text-cyan-300 hover:text-white bg-slate-800/90 hover:bg-slate-750 rounded-lg border border-cyan-500/40 hover:border-cyan-400/60 transition-colors cursor-pointer group"
             title="ChromaForge Studio Information: Made by Bolorentzon 2026"
           >
             <Sparkles className="w-3.5 h-3.5 text-cyan-400 group-hover:scale-110 transition-transform" />
@@ -201,7 +203,7 @@ export default function App() {
                 e.stopPropagation();
                 setIsLangMenuOpen(!isLangMenuOpen);
               }}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-750 rounded-lg border border-slate-700 transition-colors whitespace-nowrap cursor-pointer"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-750 rounded-lg border border-slate-700 transition-colors white-space-nowrap cursor-pointer"
               aria-label={t.languageBtn || 'Språk'}
               title={t.selectLanguage || 'Välj språk'}
             >
@@ -248,7 +250,7 @@ export default function App() {
           {/* Kobra Specs Guide Button */}
           <button
             onClick={() => setIsGuideOpen(true)}
-            className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 text-xs text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-750 rounded-lg border border-slate-700 transition-colors whitespace-nowrap cursor-pointer"
+            className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 text-xs text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-750 rounded-lg border border-slate-700 transition-colors cursor-pointer"
           >
             <Info className="w-3.5 h-3.5 text-cyan-400" />
             <span>{t.btnKobraSpecs}</span>
@@ -258,7 +260,7 @@ export default function App() {
           <button
             onClick={handleExport3MF}
             disabled={isDownloading3mf}
-            className="flex items-center gap-1.5 px-3 sm:px-3.5 py-1.5 text-xs font-semibold text-white bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-800 rounded-lg shadow-sm transition-colors whitespace-nowrap cursor-pointer"
+            className="flex items-center gap-1.5 px-3 sm:px-3.5 py-1.5 text-xs font-semibold text-white bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-800 rounded-lg shadow-sm transition-colors cursor-pointer"
           >
             <Download className="w-3.5 h-3.5" />
             <span>{isDownloading3mf ? t.btnExporting3MF : t.btnExport3MF}</span>
@@ -272,7 +274,7 @@ export default function App() {
           setCurrentModel(model);
           setSelectedSegmentId(null);
         }}
-        filaments={filaments.slice(0, maxColors)}
+        filaments={activeFilaments}
         printerType={selectedPrinterKey as any}
         isGenerating={isGenerating}
         setIsGenerating={setIsGenerating}
@@ -322,7 +324,7 @@ export default function App() {
           <div className="flex-1 relative">
             <ThreeViewport
               model={currentModel}
-              filaments={filaments.slice(0, maxColors)}
+              filaments={activeFilaments}
               printer={printer}
               slicingConfig={slicingConfig}
               slicingAnalysis={slicingAnalysis}
@@ -461,7 +463,7 @@ export default function App() {
             {activeTab === 'blender' && (
               <BlenderBridgePanel
                 model={currentModel}
-                filaments={filaments.slice(0, maxColors)}
+                filaments={activeFilaments}
                 slicingConfig={slicingConfig}
                 onModelImported={(importedModel) => {
                   setCurrentModel(importedModel);
@@ -487,3 +489,4 @@ export default function App() {
     </div>
   );
 }
+
