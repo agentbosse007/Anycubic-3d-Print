@@ -35,6 +35,20 @@ export const TRANSLATIONS: Record<SupportedLanguage, Record<string, string>> = {
     validateScriptBtn: 'Validera & Optimera skript',
     generatePromptBtn: 'Skapa Ollama-prompt från Blender',
     copiedPrompt: 'Prompt kopierad och skickad till Ollama!',
+    btnImageTo3D: 'Bild till 3D',
+    imageTo3DTitle: 'Bild till 3D-Objekt',
+    imageTo3DSubtitle: 'Konvertera foton, illustrationer eller skisser till fullvärdiga flerfärgade 3D-modeller för Anycubic Kobra 3 och Blender.',
+    imageModeAi: 'Multimodal AI-Vision',
+    imageModeRelief: 'Volumetrisk 3D-Relief & Litofan',
+    uploadImagePrompt: 'Släpp bild här eller klicka för att bläddra (PNG, JPG, WEBP, SVG)',
+    selectPresetImage: 'Eller välj ett naturtroget bildförval:',
+    reliefDepth: 'Reliefhöjd (Z)',
+    baseThickness: 'Sockeltjocklek',
+    invertHeight: 'Invertera höjdkarta',
+    smoothFilter: 'Mjuka upp konturer (Gaussiskt filter)',
+    generateFromImage: 'Skapa 3D-modell från bild',
+    generatingFromImage: 'Bearbetar och genererar 3D-objekt...',
+    colorClusteringLabel: 'Koppla bildfärger till ACE Pro-färgfack',
 
     // Creator Modal
     creatorTitle: 'ChromaForge Studio Information',
@@ -81,6 +95,33 @@ export const TRANSLATIONS: Record<SupportedLanguage, Record<string, string>> = {
     partsLabel: 'delar',
     presetsLabel: 'Förval:',
 
+    // Floating 3D Canvas Telemetry Overlay
+    overlayTitle: '3D Telemetri & Optimering',
+    overlayToggle: 'Telemetri',
+    polyCount: 'Polygoner',
+    modelTris: 'Modelltrianglar',
+    sceneTris: 'Scen-trianglar',
+    vertices: 'Hörn (Vertices)',
+    memoryUsage: 'Minnesanvändning',
+    geometryBuffer: 'Geometribuffert',
+    texturesMem: 'Texturminne',
+    gpuPrograms: 'Shaderprogram',
+    cameraCoords: 'Kamerakoordinater',
+    cameraDistance: 'Avstånd',
+    cameraAngles: 'Vinklar',
+    cameraPresets: 'Snabbvyer',
+    presetIso: 'ISO',
+    presetTop: 'Topp (Bädd)',
+    presetFront: 'Fram (Överhäng)',
+    presetSide: 'Sida',
+    printReadiness: 'Utskriftsberedskap',
+    statusOptimal: 'Optimal för FDM (Snabb skivning)',
+    statusModerate: 'Hög detaljnivå (Balanserad FDM)',
+    statusHeavy: 'Tät geometri (Slicer tar längre tid)',
+    manifoldCheck: '100% Vattentät (Manifold)',
+    copyCoords: 'Kopiera koordinater',
+    copiedNotice: 'Kopierat!',
+
     // Bleed simulation HUD
     bleedTitle: 'Simulering av färgövergång & spolspill',
     bleedSubtitle: 'Simulerar smältzonskontaminering i Anycubic ACE Pro under verktygsväxlingar',
@@ -114,6 +155,19 @@ export const TRANSLATIONS: Record<SupportedLanguage, Record<string, string>> = {
     purgeIntoInfill: 'Spola färgspill i fyllning (Infill)',
     purgeIntoSupport: 'Spola färgspill i stödstrukturer',
     wipeTowerConfig: 'Spoltorn / Wipe Tower',
+
+    // Filament Spool Telemetry Ribbon
+    spoolProgressTitle: 'Spolkapacitet & Åtgång',
+    filamentConsumption: 'Filamentåtgång',
+    spoolCapacity: 'Kvarvarande kapacitet',
+    spoolStatusSafe: 'Tillräckligt filament',
+    spoolStatusWarning: 'Låg spolnivå',
+    spoolStatusInsufficient: 'Kräver spolbyte!',
+    remainingAfter: 'kvar',
+    used: 'används',
+    activeChannelsLabel: 'Valda kanaler',
+    toggleSpoolDetails: 'Spoldetaljer',
+    vsSpoolCapacity: 'mot spolkapacitet',
 
     // Blender Bridge
     blenderTitle: 'Blender Bridge & Anycubic Exporter',
@@ -151,6 +205,20 @@ export const TRANSLATIONS: Record<SupportedLanguage, Record<string, string>> = {
     validateScriptBtn: 'Validate & Optimize Script',
     generatePromptBtn: 'Generate Ollama Prompt from Blender',
     copiedPrompt: 'Prompt copied & sent to Ollama bar!',
+    btnImageTo3D: 'Image to 3D',
+    imageTo3DTitle: 'Image to 3D Object',
+    imageTo3DSubtitle: 'Convert photos, illustrations, or sketches into multi-material 3D printable models for Anycubic Kobra 3 and Blender.',
+    imageModeAi: 'Multimodal AI Vision',
+    imageModeRelief: 'Volumetric 3D Relief & Lithophane',
+    uploadImagePrompt: 'Drop image here or click to browse (PNG, JPG, WEBP, SVG)',
+    selectPresetImage: 'Or select a lifelike image preset:',
+    reliefDepth: 'Relief Depth (Z)',
+    baseThickness: 'Base Thickness',
+    invertHeight: 'Invert Heightmap',
+    smoothFilter: 'Smooth Contours (Gaussian filter)',
+    generateFromImage: 'Generate 3D Model from Image',
+    generatingFromImage: 'Synthesizing 3D object from image...',
+    colorClusteringLabel: 'Map image colors to ACE Pro filament slots',
 
     // Creator Modal
     creatorTitle: 'ChromaForge Studio Information',
@@ -197,6 +265,33 @@ export const TRANSLATIONS: Record<SupportedLanguage, Record<string, string>> = {
     partsLabel: 'parts',
     presetsLabel: 'Presets:',
 
+    // Floating 3D Canvas Telemetry Overlay
+    overlayTitle: '3D Telemetry & Optimization',
+    overlayToggle: 'Telemetry',
+    polyCount: 'Polygons',
+    modelTris: 'Model Triangles',
+    sceneTris: 'Scene Triangles',
+    vertices: 'Vertices',
+    memoryUsage: 'Memory Usage',
+    geometryBuffer: 'Geometry Buffer',
+    texturesMem: 'Texture Memory',
+    gpuPrograms: 'Shader Programs',
+    cameraCoords: 'Camera Coordinates',
+    cameraDistance: 'Distance',
+    cameraAngles: 'Angles',
+    cameraPresets: 'Quick Views',
+    presetIso: 'ISO',
+    presetTop: 'Top (Bed)',
+    presetFront: 'Front (Overhang)',
+    presetSide: 'Side',
+    printReadiness: 'Print Readiness',
+    statusOptimal: 'Optimal for FDM (Fast Slicing)',
+    statusModerate: 'High Detail (Balanced FDM)',
+    statusHeavy: 'Dense Mesh (Slicer may be slow)',
+    manifoldCheck: '100% Watertight (Manifold)',
+    copyCoords: 'Copy Coordinates',
+    copiedNotice: 'Copied!',
+
     // Bleed simulation HUD
     bleedTitle: 'Purge Transition & Bleeding Simulation',
     bleedSubtitle: 'Simulating hotend residual pigment melt zone during Anycubic ACE Pro tool changes',
@@ -230,6 +325,19 @@ export const TRANSLATIONS: Record<SupportedLanguage, Record<string, string>> = {
     purgeIntoInfill: 'Purge waste into model infill',
     purgeIntoSupport: 'Purge waste into support structures',
     wipeTowerConfig: 'Wipe Tower Configuration',
+
+    // Filament Spool Telemetry Ribbon
+    spoolProgressTitle: 'Spool Capacity & Consumption',
+    filamentConsumption: 'Filament Consumption',
+    spoolCapacity: 'Remaining Spool Capacity',
+    spoolStatusSafe: 'Sufficient Spool',
+    spoolStatusWarning: 'Low Spool Level',
+    spoolStatusInsufficient: 'Requires Spool Swap!',
+    remainingAfter: 'left',
+    used: 'used',
+    activeChannelsLabel: 'Selected Channels',
+    toggleSpoolDetails: 'Spool Details',
+    vsSpoolCapacity: 'vs spool capacity',
 
     // Blender Bridge
     blenderTitle: 'Blender Bridge & Anycubic Exporter',
@@ -313,6 +421,33 @@ export const TRANSLATIONS: Record<SupportedLanguage, Record<string, string>> = {
     partsLabel: 'Teile',
     presetsLabel: 'Vorlagen:',
 
+    // Floating 3D Canvas Telemetry Overlay
+    overlayTitle: '3D-Telemetrie & Optimierung',
+    overlayToggle: 'Telemetrie',
+    polyCount: 'Polygone',
+    modelTris: 'Modell-Dreiecke',
+    sceneTris: 'Szenen-Dreiecke',
+    vertices: 'Punkte (Vertices)',
+    memoryUsage: 'Speichernutzung',
+    geometryBuffer: 'Geometriepuffer',
+    texturesMem: 'Texturspeicher',
+    gpuPrograms: 'Shader-Programme',
+    cameraCoords: 'Kamerakoordinaten',
+    cameraDistance: 'Abstand',
+    cameraAngles: 'Winkel',
+    cameraPresets: 'Schnellansichten',
+    presetIso: 'ISO',
+    presetTop: 'Oben (Druckbett)',
+    presetFront: 'Vorne (Überhang)',
+    presetSide: 'Seite',
+    printReadiness: 'Druckbereitschaft',
+    statusOptimal: 'Optimal für FDM (Schnelles Slicen)',
+    statusModerate: 'Hohe Detailstufe (Ausgewogen)',
+    statusHeavy: 'Dichtes Netz (Slicen dauert länger)',
+    manifoldCheck: '100% Wasserdicht (Manifold)',
+    copyCoords: 'Koordinaten kopieren',
+    copiedNotice: 'Kopiert!',
+
     // Bleed simulation HUD
     bleedTitle: 'Spülübergangs- & Farbblutungssimulation',
     bleedSubtitle: 'Simulation der Pigmentrückstände im Hotend während Anycubic ACE Pro Werkzeugwechseln',
@@ -346,6 +481,19 @@ export const TRANSLATIONS: Record<SupportedLanguage, Record<string, string>> = {
     purgeIntoInfill: 'In Bauteil-Infill spülen',
     purgeIntoSupport: 'In Stützstrukturen spülen',
     wipeTowerConfig: 'Spülturm-Konfiguration',
+
+    // Filament Spool Telemetry Ribbon
+    spoolProgressTitle: 'Spulenkapazität & Verbrauch',
+    filamentConsumption: 'Filamentverbrauch',
+    spoolCapacity: 'Verbleibende Spulenkapazität',
+    spoolStatusSafe: 'Ausreichend Filament',
+    spoolStatusWarning: 'Niedriger Stand',
+    spoolStatusInsufficient: 'Spulentausch erforderlich!',
+    remainingAfter: 'übrig',
+    used: 'verbraucht',
+    activeChannelsLabel: 'Ausgewählte Kanäle',
+    toggleSpoolDetails: 'Spulendetails',
+    vsSpoolCapacity: 'ggü. Spulenkapazität',
 
     // Blender Bridge
     blenderTitle: 'Blender-Brücke & Anycubic Exporter',
@@ -429,6 +577,33 @@ export const TRANSLATIONS: Record<SupportedLanguage, Record<string, string>> = {
     partsLabel: 'pièces',
     presetsLabel: 'Préréglages :',
 
+    // Floating 3D Canvas Telemetry Overlay
+    overlayTitle: 'Télémétrie 3D & Optimisation',
+    overlayToggle: 'Télémétrie',
+    polyCount: 'Polygones',
+    modelTris: 'Triangles du modèle',
+    sceneTris: 'Triangles scène',
+    vertices: 'Sommets (Vertices)',
+    memoryUsage: 'Utilisation mémoire',
+    geometryBuffer: 'Tampon géométrique',
+    texturesMem: 'Mémoire textures',
+    gpuPrograms: 'Programmes Shaders',
+    cameraCoords: 'Coordonnées caméra',
+    cameraDistance: 'Distance',
+    cameraAngles: 'Angles',
+    cameraPresets: 'Vues rapides',
+    presetIso: 'ISO',
+    presetTop: 'Haut (Plateau)',
+    presetFront: 'Face (Porte-à-faux)',
+    presetSide: 'Profil',
+    printReadiness: 'Prêt pour impression',
+    statusOptimal: 'Optimal pour FDM (Découpage rapide)',
+    statusModerate: 'Détail élevé (FDM équilibré)',
+    statusHeavy: 'Maillage dense (Découpage plus lent)',
+    manifoldCheck: '100% Étanche (Manifold)',
+    copyCoords: 'Copier coordonnées',
+    copiedNotice: 'Copié !',
+
     // Bleed simulation HUD
     bleedTitle: 'Simulation de transition de purge & contamination',
     bleedSubtitle: 'Simule la zone de fusion des pigments résiduels lors des changements d’outils Anycubic ACE Pro',
@@ -462,6 +637,19 @@ export const TRANSLATIONS: Record<SupportedLanguage, Record<string, string>> = {
     purgeIntoInfill: 'Purger dans le remplissage interne',
     purgeIntoSupport: 'Purger dans les supports',
     wipeTowerConfig: 'Configuration de la tour de purge',
+
+    // Filament Spool Telemetry Ribbon
+    spoolProgressTitle: 'Capacité et consommation bobines',
+    filamentConsumption: 'Consommation de filament',
+    spoolCapacity: 'Capacité restante des bobines',
+    spoolStatusSafe: 'Filament suffisant',
+    spoolStatusWarning: 'Niveau bas',
+    spoolStatusInsufficient: 'Changement de bobine requis !',
+    remainingAfter: 'restant',
+    used: 'utilisé',
+    activeChannelsLabel: 'Canaux sélectionnés',
+    toggleSpoolDetails: 'Détails bobines',
+    vsSpoolCapacity: 'vs capacité bobine',
 
     // Blender Bridge
     blenderTitle: 'Pont Blender & Exportateur Anycubic',
@@ -545,6 +733,33 @@ export const TRANSLATIONS: Record<SupportedLanguage, Record<string, string>> = {
     partsLabel: 'piezas',
     presetsLabel: 'Ajustes:',
 
+    // Floating 3D Canvas Telemetry Overlay
+    overlayTitle: 'Telemetría 3D y Optimización',
+    overlayToggle: 'Telemetría',
+    polyCount: 'Polígonos',
+    modelTris: 'Triángulos de modelo',
+    sceneTris: 'Triángulos de escena',
+    vertices: 'Vértices',
+    memoryUsage: 'Uso de memoria',
+    geometryBuffer: 'Búfer geométrico',
+    texturesMem: 'Memoria de texturas',
+    gpuPrograms: 'Programas de sombreado',
+    cameraCoords: 'Coordenadas de cámara',
+    cameraDistance: 'Distancia',
+    cameraAngles: 'Ángulos',
+    cameraPresets: 'Vistas rápidas',
+    presetIso: 'ISO',
+    presetTop: 'Superior (Cama)',
+    presetFront: 'Frontal (Voladizo)',
+    presetSide: 'Lateral',
+    printReadiness: 'Preparación de impresión',
+    statusOptimal: 'Óptimo para FDM (Laminado rápido)',
+    statusModerate: 'Alto detalle (FDM equilibrado)',
+    statusHeavy: 'Malla densa (Laminador más lento)',
+    manifoldCheck: '100% Hermético (Manifold)',
+    copyCoords: 'Copiar coordenadas',
+    copiedNotice: '¡Copiado!',
+
     // Bleed simulation HUD
     bleedTitle: 'Simulación de transición de purga y sangrado',
     bleedSubtitle: 'Simulando zona de fusión de pigmento residual durante cambios de herramienta en Anycubic ACE Pro',
@@ -578,6 +793,19 @@ export const TRANSLATIONS: Record<SupportedLanguage, Record<string, string>> = {
     purgeIntoInfill: 'Purgar residuo en relleno interno',
     purgeIntoSupport: 'Purgar residuo en soportes',
     wipeTowerConfig: 'Configuración de torre de purga',
+
+    // Filament Spool Telemetry Ribbon
+    spoolProgressTitle: 'Capacidad de bobina y consumo',
+    filamentConsumption: 'Consumo de filamento',
+    spoolCapacity: 'Capacidad restante de bobina',
+    spoolStatusSafe: 'Filamento suficiente',
+    spoolStatusWarning: 'Nivel bajo',
+    spoolStatusInsufficient: '¡Requiere cambio de bobina!',
+    remainingAfter: 'restante',
+    used: 'usado',
+    activeChannelsLabel: 'Canales seleccionados',
+    toggleSpoolDetails: 'Detalles de bobina',
+    vsSpoolCapacity: 'vs capacidad de bobina',
 
     // Blender Bridge
     blenderTitle: 'Puente Blender & Exportador Anycubic',
@@ -661,6 +889,33 @@ export const TRANSLATIONS: Record<SupportedLanguage, Record<string, string>> = {
     partsLabel: '个组件',
     presetsLabel: '快速预设:',
 
+    // Floating 3D Canvas Telemetry Overlay
+    overlayTitle: '3D 遥测与打印优化',
+    overlayToggle: '遥测',
+    polyCount: '多边形面数',
+    modelTris: '模型三角面',
+    sceneTris: '全场景三角面',
+    vertices: '顶点数',
+    memoryUsage: '内存显存占用',
+    geometryBuffer: '几何体缓存',
+    texturesMem: '纹理显存',
+    gpuPrograms: '着色器程序',
+    cameraCoords: '当前摄像机坐标',
+    cameraDistance: '观测距离',
+    cameraAngles: '视场角度',
+    cameraPresets: '快速预设机位',
+    presetIso: '等轴 (3/4)',
+    presetTop: '俯视 (热床)',
+    presetFront: '正视 (悬垂)',
+    presetSide: '侧视',
+    printReadiness: '切片打印优化评级',
+    statusOptimal: 'FDM 黄金面数 (高速切片)',
+    statusModerate: '高精细节 (均衡适中)',
+    statusHeavy: '极密网格 (切片耗时较长)',
+    manifoldCheck: '100% 封闭流形 (水密模型)',
+    copyCoords: '复制坐标',
+    copiedNotice: '已复制!',
+
     // Bleed simulation HUD
     bleedTitle: '冲刷过渡与混色渗漏模拟',
     bleedSubtitle: '模拟 Anycubic ACE Pro 喷嘴熔池在换料时的残余颜料渗色风险',
@@ -695,6 +950,19 @@ export const TRANSLATIONS: Record<SupportedLanguage, Record<string, string>> = {
     purgeIntoSupport: '废料冲刷到支撑结构',
     wipeTowerConfig: '擦拭塔 / 冲刷塔设置',
 
+    // Filament Spool Telemetry Ribbon
+    spoolProgressTitle: '料盘余量与打印消耗',
+    filamentConsumption: '耗材消耗量',
+    spoolCapacity: '料盘剩余总容量',
+    spoolStatusSafe: '余量充足',
+    spoolStatusWarning: '余量偏低',
+    spoolStatusInsufficient: '余量不足需换料！',
+    remainingAfter: '剩余',
+    used: '消耗',
+    activeChannelsLabel: '所选打印通道',
+    toggleSpoolDetails: '料盘详情',
+    vsSpoolCapacity: '对比料盘容量',
+
     // Blender Bridge
     blenderTitle: 'Blender 桥接与 Anycubic 导出器',
     blenderSubtitle: '在网页与 Blender (bpy) 之间双向传输文本与几何数据，支持 3MF 与 STL 导出。',
@@ -713,7 +981,7 @@ export const TRANSLATIONS: Record<SupportedLanguage, Record<string, string>> = {
   },
 };
 
-import { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useState } from 'react';
 
 interface LanguageContextType {
   lang: SupportedLanguage;
@@ -751,10 +1019,10 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const t = TRANSLATIONS[lang] || TRANSLATIONS.sv;
 
-  return (
-    <LanguageContext.Provider value={{ lang, setLang, t }}>
-      {children}
-    </LanguageContext.Provider>
+  return React.createElement(
+    LanguageContext.Provider,
+    { value: { lang, setLang, t } },
+    children
   );
 };
 

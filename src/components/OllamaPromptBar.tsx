@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import type { FilamentChannel, ModelDefinition, OllamaState } from '../types';
-import { Sparkles, Terminal, CheckCircle2, AlertCircle, RefreshCw, Send, Cpu, ChevronDown, Leaf, Wand2 } from 'lucide-react';
+import { Sparkles, Terminal, CheckCircle2, AlertCircle, RefreshCw, Send, Cpu, ChevronDown, Leaf, Wand2, Image as ImageIcon } from 'lucide-react';
 import { sanitizeAndRepairJson, normalizeModelDefinition, buildOptimizedPrompt } from '../utils/aiModelParser';
 import type { SupportedLanguage } from '../utils/i18n';
 import { TRANSLATIONS } from '../utils/i18n';
@@ -14,6 +14,7 @@ interface OllamaPromptBarProps {
   lang?: SupportedLanguage;
   externalPrompt?: string;
   onClearExternalPrompt?: () => void;
+  onOpenImageTo3D?: () => void;
 }
 
 export const OllamaPromptBar: React.FC<OllamaPromptBarProps> = ({
@@ -25,6 +26,7 @@ export const OllamaPromptBar: React.FC<OllamaPromptBarProps> = ({
   lang = 'sv',
   externalPrompt,
   onClearExternalPrompt,
+  onOpenImageTo3D,
 }) => {
   const t = TRANSLATIONS[lang] || TRANSLATIONS.sv;
   const [prompt, setPrompt] = useState<string>('');
@@ -121,14 +123,60 @@ export const OllamaPromptBar: React.FC<OllamaPromptBarProps> = ({
     try {
       if (selectedEngine === 'ollama' && ollamaState.isConnected) {
         // 1. Ollama generation
-        const systemPrompt = `You are ChromaForge CAD AI for Anycubic Kobra 3 (8-color ACE Pro).
-Return ONLY JSON with: name, description, dimensions: {x,y,z}, segments: [{id, name, filamentId (1 to 8), geometryType: "organic_mesh"|"box"|"cylinder"|"sphere"|"cone"|"ring", transform: {position:[x,y,z], rotation:[rx,ry,rz], scale:[sx,sy,sz]}, parameters: {width,height,depth,radius,organicType: "frog_body"|"frog_limb"|"butterfly_wing"|"nautilus_shell"|"petal"|"rock_pedestal"|"organic_eye"|"chameleon_tail"|"mushroom_cap"|"mushroom_stem"|"succulent_rosette"|"crystal_cluster"|"beetle_elytra"|"tree_trunk_bark"|"tortoise_shell"|"leaf_vein", finish: "organic_skin"|"glossy_chitin"|"mineral_stone"|"botanical_petal"|"fleshy_succulent"}}], blenderPythonScript: "...", slicingTips: ["..."]`;
+        const filamentDesc = filaments.map(f => `Slot ${f.id}: "${f.name}" (${f.color}, ${f.material})`).join(', ');
+        const systemPrompt = `You are ChromaForge CAD AI for Anycubic Kobra 3 (with ACE Pro 4-to-8 multi-color system).
+You fully understand natural language prompts in Swedish, English, German, French, Spanish, and Chinese without misinterpretation.
+Swedish biological vocabulary guide:
+- "giftpilgroda" / "pilgiftsgroda" -> poison dart frog (frog_body, frog_limb, organic_eye)
+- "svamp" / "flugsvamp" / "kantarell" -> mushroom/fungus (mushroom_cap, mushroom_stem)
+- "kameleont" / "ödla" -> chameleon with prehensile tail (frog_body, chameleon_tail, organic_eye)
+- "fjäril" / "monark" -> butterfly with cambered aerofoil wings (butterfly_wing, butterfly_body)
+- "snäcka" / "nautilus" / "ammonit" -> spiral nautilus shell (nautilus_shell)
+- "suckulent" / "kaktus" -> fleshy succulent rosette (succulent_rosette)
+- "kristall" / "kvarts" -> hexagonal quartz geode (crystal_cluster)
+- "sköldpadda" -> Galapagos tortoise with domed scutes (tortoise_shell)
+- "gren" / "trädbark" / "stam" -> weathered branch perch (tree_trunk_bark)
+- "sten" / "klippa" / "sockel" -> bed adhesion boulder pedestal (rock_pedestal)
+
+Available Loaded Filament Channels:
+${filamentDesc}
+
+Return STRICT JSON ONLY (no markdown backticks, no comments, no trailing commas).
+JSON Schema:
+{
+  "name": "string (model title)",
+  "description": "string (lifelike biological/engineering description)",
+  "dimensions": { "x": number, "y": number, "z": number },
+  "segments": [
+    {
+      "id": "string",
+      "name": "string",
+      "filamentId": number (1 to ${filaments.length}),
+      "geometryType": "organic_mesh" | "box" | "cylinder" | "sphere" | "cone" | "ring",
+      "transform": {
+        "position": [x, y, z],
+        "rotation": [rx, ry, rz],
+        "scale": [sx, sy, sz]
+      },
+      "parameters": {
+        "width": number,
+        "height": number,
+        "depth": number,
+        "radius": number,
+        "organicType": "frog_body" | "frog_limb" | "butterfly_wing" | "butterfly_body" | "nautilus_shell" | "petal" | "rock_pedestal" | "organic_eye" | "chameleon_tail" | "mushroom_cap" | "mushroom_stem" | "succulent_rosette" | "crystal_cluster" | "beetle_elytra" | "tree_trunk_bark" | "tortoise_shell" | "leaf_vein",
+        "finish": "organic_skin" | "glossy_chitin" | "mineral_stone" | "botanical_petal" | "fleshy_succulent" | "crystalline_quartz"
+      }
+    }
+  ],
+  "blenderPythonScript": "string (complete runnable bpy script)",
+  "slicingTips": ["string"]
+}`;
 
         const res = await fetch('/api/ollama/generate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            prompt: `Create an optimized 3D multi-color printable model: "${prompt}" using up to ${filaments.length} filaments.`,
+            prompt: `Create an anatomically sculpted, lifelike 3D multi-color printable model: "${prompt}" using up to ${filaments.length} filaments. Ensure 100% stable PEI bed contact and distinct layer-separated color zones.`,
             model: ollamaState.model,
             system: systemPrompt,
           }),
@@ -275,6 +323,31 @@ Return ONLY JSON with: name, description, dimensions: {x,y,z}, segments: [{id, n
         { id: 'turt-leg-fl', name: 'Foreleg Left Flange', filamentId: 6, geometryType: 'organic_mesh', transform: { position: [-18, 12, 14], rotation: [0.3, 0.4, -0.2], scale: [0.85, 0.85, 0.85] }, parameters: { radius: 10, organicType: 'frog_limb', finish: 'organic_skin' } },
         { id: 'turt-leg-fr', name: 'Foreleg Right Flange', filamentId: 6, geometryType: 'organic_mesh', transform: { position: [18, 12, 14], rotation: [0.3, -0.4, 0.2], scale: [0.85, 0.85, 0.85] }, parameters: { radius: 10, organicType: 'frog_limb', finish: 'organic_skin' } },
         { id: 'turt-head', name: 'Rostral Head & Neck', filamentId: 6, geometryType: 'sphere', transform: { position: [0, 18, 28], rotation: [0.2, 0, 0], scale: [1, 0.8, 1.3] }, parameters: { radius: 8.5 } },
+      ];
+    } else if (isButterfly) {
+      modelName = 'Monarch Butterfly on Orchid Petal Perch (7-Color)';
+      modelDesc = 'Lifelike lepidopteran anatomy with aerofoil cambered forewings, hindwing submarginal spots, segmented chitin thorax, and botanical petal resting base.';
+      dims = { x: 86, y: 50, z: 80 };
+      generatedSegments = [
+        { id: 'bf-pedestal', name: 'Granite Flora Perch Bed', filamentId: 8, geometryType: 'organic_mesh', transform: { position: [0, 4, 0], rotation: [0, 0, 0], scale: [1.2, 0.4, 1.1] }, parameters: { radius: 34, organicType: 'rock_pedestal', finish: 'mineral_stone' } },
+        { id: 'bf-petal', name: 'Orchid Petal Resting Platform', filamentId: 4, geometryType: 'organic_mesh', transform: { position: [0, 10, 0], rotation: [0.2, 0, 0], scale: [1, 1, 1] }, parameters: { width: 50, height: 40, organicType: 'petal', finish: 'botanical_petal' } },
+        { id: 'bf-thorax', name: 'Segmented Chitin Thorax & Abdomen', filamentId: 1, geometryType: 'organic_mesh', transform: { position: [0, 18, 0], rotation: [0.15, 0, 0], scale: [0.6, 0.6, 1.3] }, parameters: { radius: 8, organicType: 'frog_body', finish: 'glossy_chitin' } },
+        { id: 'bf-wing-fl', name: 'Left Cambered Forewing', filamentId: 7, geometryType: 'organic_mesh', transform: { position: [-22, 28, 4], rotation: [0.3, 0.4, -0.2], scale: [1, 1, 1] }, parameters: { width: 44, height: 36, organicType: 'butterfly_wing', finish: 'botanical_petal' } },
+        { id: 'bf-wing-fr', name: 'Right Cambered Forewing', filamentId: 7, geometryType: 'organic_mesh', transform: { position: [22, 28, 4], rotation: [0.3, -0.4, 0.2], scale: [-1, 1, 1] }, parameters: { width: 44, height: 36, organicType: 'butterfly_wing', finish: 'botanical_petal' } },
+        { id: 'bf-wing-hl', name: 'Left Scalloped Hindwing', filamentId: 6, geometryType: 'organic_mesh', transform: { position: [-16, 22, -14], rotation: [0.15, 0.3, -0.1], scale: [0.8, 0.8, 0.8] }, parameters: { width: 32, height: 28, organicType: 'butterfly_wing', finish: 'botanical_petal' } },
+        { id: 'bf-wing-hr', name: 'Right Scalloped Hindwing', filamentId: 6, geometryType: 'organic_mesh', transform: { position: [16, 22, -14], rotation: [0.15, -0.3, 0.1], scale: [-0.8, 0.8, 0.8] }, parameters: { width: 32, height: 28, organicType: 'butterfly_wing', finish: 'botanical_petal' } },
+        { id: 'bf-spots', name: 'Marginal Warning Spots', filamentId: 2, geometryType: 'sphere', transform: { position: [0, 22, 12], rotation: [0, 0, 0], scale: [1, 1, 1] }, parameters: { radius: 3 } },
+      ];
+    } else if (isNautilus) {
+      modelName = 'Fibonacci Logarithmic Nautilus Shell (6-Color)';
+      modelDesc = 'Geometrically exact logarithmic spiral shell with growth ribbing, iridescent nacre chambers, and marine seabed matrix.';
+      dims = { x: 78, y: 64, z: 74 };
+      generatedSegments = [
+        { id: 'naut-sand', name: 'Marine Sand Matrix Bed', filamentId: 5, geometryType: 'organic_mesh', transform: { position: [0, 5, 0], rotation: [0, 0, 0], scale: [1.2, 0.45, 1.1] }, parameters: { radius: 34, organicType: 'rock_pedestal', finish: 'mineral_stone' } },
+        { id: 'naut-shell', name: 'Fibonacci Logarithmic Shell', filamentId: 1, geometryType: 'organic_mesh', transform: { position: [0, 32, 0], rotation: [0, 0, 0.1], scale: [1, 1, 1] }, parameters: { radius: 32, organicType: 'nautilus_shell', finish: 'organic_skin' } },
+        { id: 'naut-stripes', name: 'Zebra Camouflage Flame Bands', filamentId: 7, geometryType: 'organic_mesh', transform: { position: [0, 34, 0], rotation: [0, 0.2, 0.1], scale: [1.02, 1.02, 1.02] }, parameters: { radius: 30, organicType: 'nautilus_shell', finish: 'organic_skin' } },
+        { id: 'naut-aperture', name: 'Living Chamber Aperture Collar', filamentId: 4, geometryType: 'ring', transform: { position: [18, 20, 6], rotation: [0.4, 0.2, 0], scale: [1, 1, 1] }, parameters: { radius: 14, tube: 3 } },
+        { id: 'naut-umbilicus', name: 'Deep Umbilicus Depressed Core', filamentId: 8, geometryType: 'sphere', transform: { position: [0, 32, 0], rotation: [0, 0, 0], scale: [0.6, 0.6, 0.6] }, parameters: { radius: 6 } },
       ];
     } else if (isFrog || isGeneralNature) {
       // Default / Frog flagship: Anatomically sculpted poison dart frog on weathered stone
@@ -473,6 +546,20 @@ Return ONLY JSON with: name, description, dimensions: {x,y,z}, segments: [{id, n
           <span>{isOptimizing ? (t.btnOptimizing || 'Optimerar...') : (t.btnOptimizePrompt || 'Optimera prompt')}</span>
         </button>
 
+        {/* Bild till 3D Modal Trigger Button */}
+        {onOpenImageTo3D && (
+          <button
+            type="button"
+            onClick={onOpenImageTo3D}
+            disabled={isGenerating}
+            className="flex items-center gap-1.5 px-3 sm:px-3.5 py-2.5 bg-gradient-to-r from-emerald-600/90 to-cyan-600/90 hover:from-emerald-500 hover:to-cyan-500 text-white border border-cyan-400/40 text-xs font-semibold rounded-lg shadow-sm transition-all whitespace-nowrap cursor-pointer group"
+            title="Ladda upp bild eller välj förval för att konvertera bild till 3D-objekt"
+          >
+            <ImageIcon className="w-3.5 h-3.5 text-cyan-200 group-hover:scale-110 transition-transform" />
+            <span>{t.btnImageTo3D || 'Bild till 3D'}</span>
+          </button>
+        )}
+
         <button
           type="submit"
           disabled={!prompt.trim() || isGenerating}
@@ -495,6 +582,16 @@ Return ONLY JSON with: name, description, dimensions: {x,y,z}, segments: [{id, n
       {/* Quick Prompt Ideas */}
       <div className="flex items-center gap-2 overflow-x-auto pb-0.5 text-xs text-slate-400 scrollbar-none">
         <span className="shrink-0 text-slate-500 font-medium">Quick Presets:</span>
+        {onOpenImageTo3D && (
+          <button
+            type="button"
+            onClick={onOpenImageTo3D}
+            className="shrink-0 px-2.5 py-1 bg-cyan-950/80 hover:bg-cyan-900 text-cyan-300 hover:text-white rounded border border-cyan-500/40 transition-colors whitespace-nowrap flex items-center gap-1 font-semibold"
+          >
+            <ImageIcon className="w-3 h-3 text-cyan-400" />
+            <span>Foto / Skiss till 3D</span>
+          </button>
+        )}
         {samplePrompts.map((s, idx) => (
           <button
             key={idx}

@@ -5,6 +5,28 @@ import type { MeshSegment } from '../types';
  * Creates high-detail organic procedural BufferGeometry with smooth normal vectors
  */
 export function generateOrganicBufferGeometry(segment: MeshSegment): THREE.BufferGeometry {
+  // If custom vertex/face geometry is supplied (e.g. from Image-to-3D Relief or photogrammetry)
+  if (segment.parameters.customGeometry) {
+    const { vertices, indices } = segment.parameters.customGeometry;
+    const geo = new THREE.BufferGeometry();
+    const flatVerts = new Float32Array(vertices.length * 3);
+    for (let i = 0; i < vertices.length; i++) {
+      flatVerts[i * 3] = vertices[i][0];
+      flatVerts[i * 3 + 1] = vertices[i][1];
+      flatVerts[i * 3 + 2] = vertices[i][2];
+    }
+    geo.setAttribute('position', new THREE.BufferAttribute(flatVerts, 3));
+    const flatIndices = new Uint32Array(indices.length * 3);
+    for (let i = 0; i < indices.length; i++) {
+      flatIndices[i * 3] = indices[i][0];
+      flatIndices[i * 3 + 1] = indices[i][1];
+      flatIndices[i * 3 + 2] = indices[i][2];
+    }
+    geo.setIndex(new THREE.BufferAttribute(flatIndices, 1));
+    geo.computeVertexNormals();
+    return geo;
+  }
+
   const organicType = segment.parameters.organicType || 'smooth_anatomy';
   const width = segment.parameters.width || 20;
   const height = segment.parameters.height || 20;

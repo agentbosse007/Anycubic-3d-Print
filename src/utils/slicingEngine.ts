@@ -159,6 +159,10 @@ export function analyzeMultiMaterialSlicing(
       toolChangeLayers: [],
       bleedRisks: [],
       hasCriticalBleed: false,
+      channelConsumptions: [],
+      totalSpoolCapacityGrams: 0,
+      spoolConsumptionPercent: 0,
+      hasInsufficientSpool: false,
     };
   }
 
@@ -183,6 +187,8 @@ export function analyzeMultiMaterialSlicing(
   // Build matrix once using active filaments only
   const flushMatrix = buildFlushMatrix(activeFilaments, config.flushingMultiplier);
 
+  const channelPurgeVolumes: Record<number, number> = {};
+
   // Scan every layer
   for (let l = 0; l < totalLayers; l++) {
     const currentZ = l * layerHeight;
@@ -205,6 +211,7 @@ export function analyzeMultiMaterialSlicing(
           const toFil = activeFilaments[toIdx];
 
           totalPurgeMm3 += flush;
+          channelPurgeVolumes[slotId] = (channelPurgeVolumes[slotId] || 0) + flush;
           toolChangesCount++;
           toolChangeLayers.push({
             layer: l + 1,
@@ -255,6 +262,7 @@ export function analyzeMultiMaterialSlicing(
       const toFil = activeFilaments[toIdx];
 
       totalPurgeMm3 += flush;
+      channelPurgeVolumes[nextSlot] = (channelPurgeVolumes[nextSlot] || 0) + flush;
       toolChangesCount++;
       toolChangeLayers.push({
         layer: l + 1,
@@ -305,16 +313,61 @@ export function analyzeMultiMaterialSlicing(
   const purgeWasteGrams = parseFloat((effectivePurgeMm3 * plaDensity).toFixed(1));
   const infillSavingsGrams = parseFloat(((totalPurgeMm3 - effectivePurgeMm3) * plaDensity).toFixed(1));
 
-  // Rough model volume estimate
+  // Rough model volume estimate & per-channel model volume
   let modelVolumeMm3 = 0;
+  const channelModelVolumes: Record<number, number> = {};
   for (const s of segments) {
     const w = s.parameters.width || s.parameters.radius || 20;
     const h = s.parameters.height || 20;
     const d = s.parameters.depth || s.parameters.radius || 20;
-    modelVolumeMm3 += w * h * d * 0.45; // partial infill density
+    const segVol = w * h * d * 0.45; // partial infill density
+    modelVolumeMm3 += segVol;
+    channelModelVolumes[s.filamentId] = (channelModelVolumes[s.filamentId] || 0) + segVol;
   }
   const modelFilamentGrams = parseFloat((modelVolumeMm3 * (config.infillDensity / 100) * plaDensity + 12).toFixed(1));
   const totalFilamentGrams = parseFloat((modelFilamentGrams + purgeWasteGrams).toFixed(1));
+
+  // Calculate detailed per-channel consumption & remaining spool capacity
+  const activeModelFilamentIds = new Set(segments.map(s => s.filamentId));
+
+  const channelConsumptions = filaments.map(fil => {
+    const rawModelVol = channelModelVolumes[fil.id] || 0;
+    const rawPurgeMm3 = (channelPurgeVolumes[fil.id] || 0) * (1 - infillSavingsFactor);
+
+    const chModelGrams = rawModelVol > 0
+      ? parseFloat((rawModelVol * (config.infillDensity / 100) * plaDensity + (activeModelFilamentIds.has(fil.id) ? 3 : 0)).toFixed(1))
+      : 0;
+    const chPurgeGrams = parseFloat((rawPurgeMm3 * plaDensity).toFixed(1));
+    const chTotalGrams = parseFloat((chModelGrams + chPurgeGrams).toFixed(1));
+    const spoolGrams = fil.spoolGramsRemaining || 1000;
+    const percentUsed = spoolGrams > 0 ? parseFloat(((chTotalGrams / spoolGrams) * 100).toFixed(1)) : 0;
+    const remainingAfter = Math.max(0, parseFloat((spoolGrams - chTotalGrams).toFixed(1)));
+    const isSufficient = spoolGrams >= chTotalGrams;
+
+    return {
+      channelId: fil.id,
+      channelName: fil.name,
+      color: fil.color,
+      material: fil.material,
+      modelGrams: chModelGrams,
+      purgeGrams: chPurgeGrams,
+      totalGrams: chTotalGrams,
+      spoolGramsRemaining: spoolGrams,
+      percentOfSpoolUsed: percentUsed,
+      remainingAfterPrintGrams: remainingAfter,
+      isSufficient,
+    };
+  });
+
+  const usedChannels = channelConsumptions.filter(c => activeModelFilamentIds.has(c.channelId));
+  const targetChannels = usedChannels.length > 0 ? usedChannels : channelConsumptions;
+
+  const totalSpoolCapacityGrams = targetChannels.reduce((sum, c) => sum + c.spoolGramsRemaining, 0);
+  const totalConsumptionOfSelected = targetChannels.reduce((sum, c) => sum + c.totalGrams, 0);
+  const spoolConsumptionPercent = totalSpoolCapacityGrams > 0
+    ? parseFloat(((totalConsumptionOfSelected / totalSpoolCapacityGrams) * 100).toFixed(1))
+    : 0;
+  const hasInsufficientSpool = targetChannels.some(c => !c.isSufficient);
 
   // Estimated tool change duration on Anycubic ACE Pro: ~38 seconds per change
   const secondsPerToolChange = 38;
@@ -337,6 +390,10 @@ export function analyzeMultiMaterialSlicing(
     toolChangeLayers,
     bleedRisks,
     hasCriticalBleed: bleedRisks.some(b => b.bleedSeverity === 'critical'),
+    channelConsumptions,
+    totalSpoolCapacityGrams,
+    spoolConsumptionPercent,
+    hasInsufficientSpool,
   };
 }
 

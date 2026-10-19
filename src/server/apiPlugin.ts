@@ -25,7 +25,7 @@ export function chromaForgeApiPlugin(): Plugin {
           return new Promise((resolve, reject) => {
             let body = '';
             req.on('data', chunk => {
-              body += chunk.toString();
+              body += chunk.toString('utf-8');
             });
             req.on('end', () => {
               try {
@@ -205,6 +205,119 @@ Design high quality, visually recognizable, cohesive multi-material assemblies (
                 error: geminiErr.message,
                 quotaExceeded: geminiErr.message?.includes('quota') || geminiErr.message?.includes('resource_exhausted'),
                 useFallback: true,
+              });
+            }
+          }
+
+          // 3b. Image to 3D Multimodal Vision Endpoint (Gemini 3.8 Flash Vision)
+          if (req.url === '/api/ai/image-to-3d' && req.method === 'POST') {
+            const body = await getBody();
+            const { imageBase64, mimeType = 'image/png', prompt = '', filamentSlots = [], printerType = 'kobra3' } = body;
+
+            if (!imageBase64) {
+              return sendJson(400, { error: 'No image data provided' });
+            }
+
+            const apiKey = process.env.GEMINI_API_KEY;
+            if (!apiKey) {
+              return sendJson(200, {
+                useFallback: true,
+                message: 'GEMINI_API_KEY not configured, using high-speed client-side vision & relief reconstruction.',
+              });
+            }
+
+            try {
+              let cleanData = imageBase64;
+              let detectedMime = mimeType;
+              if (imageBase64.includes(';base64,')) {
+                const parts = imageBase64.split(';base64,');
+                const m = parts[0].match(/:(.*?)$/);
+                if (m) detectedMime = m[1];
+                cleanData = parts[1];
+              }
+
+              const ai = new GoogleGenAI({
+                apiKey,
+                httpOptions: { headers: { 'User-Agent': 'aistudio-build' } },
+              });
+
+              const filamentInfo = (filamentSlots || []).map((f: any) =>
+                `Slot ${f.id}: "${f.name}" (${f.color}, ${f.material})`
+              ).join('\n');
+
+              const systemInstruction = `You are ChromaForge CAD AI, an elite computer vision and 3D parametric computational geometry engineer specialized in reconstructing lifelike, physical 3D objects from images for Anycubic Kobra 3 (with ACE Pro 4-to-8 multi-color system).
+Available Filaments:
+${filamentInfo}
+
+Your task:
+1. Examine the image carefully. Identify what the subject is (e.g. poison dart frog, monarch butterfly, nautilus shell, amanita mushroom, succulent rosette, quartz crystal, tortoise shell, flower/orchid, animal, logo, relief, or mechanical part).
+2. Segment the subject into 4 to 8 distinct geometric components ("segments") corresponding to the colors visible in the image.
+3. Map each segment's filamentId (1 to 8) to the closest matching filament color in the available slots above.
+4. For biological/natural subjects, always specify "geometryType": "organic_mesh" with the matching "organicType" ("frog_body", "frog_limb", "butterfly_wing", "butterfly_body", "nautilus_shell", "feather_plumage", "petal", "rock_pedestal", "organic_eye", "branch_bark", "leaf_vein", "smooth_anatomy", "fossil_spiral", "chameleon_tail", "mushroom_cap", "mushroom_stem", "succulent_rosette", "crystal_cluster", "tortoise_shell").
+5. Position and scale the parts to create a stable, bed-adhering 3D assembly (within 250x250x260mm build volume).
+6. Return ONLY valid JSON (no markdown fence, no backticks):
+{
+  "name": "Model Title based on image",
+  "description": "Visual analysis and anatomical breakdown of the image",
+  "detectedSubject": "...",
+  "dimensions": { "x": number, "y": number, "z": number },
+  "segments": [
+    {
+      "id": "segment-1",
+      "name": "Component Name",
+      "filamentId": number,
+      "geometryType": "organic_mesh" | "box" | "cylinder" | "sphere" | "torus" | "cone",
+      "transform": { "position": [x,y,z], "rotation": [rx,ry,rz], "scale": [sx,sy,sz] },
+      "parameters": {
+        "width": number, "height": number, "depth": number, "radius": number,
+        "organicType": "...",
+        "finish": "organic_skin" | "matte_feather" | "glossy_chitin" | "mineral_stone" | "botanical_petal" | "fleshy_succulent" | "crystalline_quartz" | "translucent_resin"
+      }
+    }
+  ],
+  "blenderPythonScript": "Full executable Blender bpy script creating this multi-material model",
+  "slicingOptimizationTips": ["Tip regarding bed adhesion", "Tip regarding color transitions"]
+}`;
+
+              const res = await ai.models.generateContent({
+                model: 'gemini-3.8-flash',
+                contents: [
+                  {
+                    role: 'user',
+                    parts: [
+                      {
+                        inlineData: {
+                          data: cleanData,
+                          mimeType: detectedMime,
+                        },
+                      },
+                      {
+                        text: `Transform this image into a full 3D multi-material model. ${prompt ? `Additional instructions: "${prompt}"` : ''}`,
+                      },
+                    ],
+                  },
+                ],
+                config: {
+                  systemInstruction,
+                  responseMimeType: 'application/json',
+                },
+              });
+
+              const text = res.text || '';
+              try {
+                const parsed = JSON.parse(text);
+                return sendJson(200, parsed);
+              } catch (parseError) {
+                return sendJson(200, {
+                  raw: text,
+                  message: 'Raw text returned from Gemini Vision model.',
+                });
+              }
+            } catch (visionErr: any) {
+              console.warn('Gemini Vision API error:', visionErr.message);
+              return sendJson(200, {
+                useFallback: true,
+                error: visionErr.message,
               });
             }
           }

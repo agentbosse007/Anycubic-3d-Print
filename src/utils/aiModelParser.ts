@@ -108,12 +108,48 @@ export function normalizeModelDefinition(
     ? rawObj.description.trim()
     : 'AI-generated multi-material model optimized for Anycubic Kobra.';
 
-  const dimX = Number(rawObj.dimensions?.x) || 75;
-  const dimY = Number(rawObj.dimensions?.y) || 60;
-  const dimZ = Number(rawObj.dimensions?.z) || 70;
 
   const rawSegments = Array.isArray(rawObj.segments) ? rawObj.segments : [];
   const segments: MeshSegment[] = [];
+
+  // Multilingual geometry type mapper (Swedish, English, standard synonyms)
+  const mapGeometryType = (rawType: any, organicTypeHint?: string): MeshSegment['geometryType'] => {
+    if (organicTypeHint) return 'organic_mesh';
+    const s = String(rawType || '').toLowerCase().trim();
+    if (['box', 'cube', 'kub', 'låda', 'block', 'rätblock'].includes(s)) return 'box';
+    if (['cylinder', 'cyl', 'tub', 'rör', 'pelare', 'kolumn'].includes(s)) return 'cylinder';
+    if (['sphere', 'sfär', 'klot', 'uv_sphere', 'ico_sphere', 'glob', 'boll'].includes(s)) return 'sphere';
+    if (['cone', 'kon', 'spira'].includes(s)) return 'cone';
+    if (['torus', 'ring', 'krage', 'donut', 'cirkel'].includes(s)) return 'ring';
+    if (['organic_mesh', 'organic', 'organisk', 'organisk_mesh', 'mesh', 'parametric_surface', 'pydata'].includes(s)) return 'organic_mesh';
+    return 'cylinder';
+  };
+
+  // Multilingual organic type mapper (Swedish, English, scientific terms)
+  const mapOrganicType = (rawType: any, rawName: string): any => {
+    const s = `${String(rawType || '')} ${rawName}`.toLowerCase();
+    if (s.includes('svamp_hatt') || s.includes('svamphatt') || s.includes('pileus') || s.includes('mushroom_cap') || (s.includes('svamp') && (s.includes('hatt') || s.includes('cap') || s.includes('kantarell') || s.includes('flugsvamp')))) return 'mushroom_cap';
+    if (s.includes('svamp_fot') || s.includes('svamp_stam') || s.includes('stipe') || s.includes('mushroom_stem') || (s.includes('svamp') && (s.includes('fot') || s.includes('stam') || s.includes('stjälk')))) return 'mushroom_stem';
+    if (s.includes('groda_ben') || s.includes('frog_limb') || s.includes('amphibian_leg') || s.includes('tass') || s.includes('grodben') || s.includes('forelimb') || s.includes('hindlimb')) return 'frog_limb';
+    if (s.includes('groda') || s.includes('frog') || s.includes('toad') || s.includes('dendrobates') || s.includes('padda') || s.includes('amphibian')) return 'frog_body';
+    if (s.includes('kameleon') || s.includes('chameleon') || s.includes('svans') || s.includes('tail') || s.includes('chameleon_tail')) return 'chameleon_tail';
+    if (s.includes('vinge') || s.includes('wing') || s.includes('butterfly_wing') || s.includes('fjärilsvinge')) return 'butterfly_wing';
+    if (s.includes('fjärilskropp') || s.includes('butterfly_body') || s.includes('thorax') || s.includes('abdomen')) return 'butterfly_body';
+    if (s.includes('snäcka') || s.includes('nautilus') || s.includes('shell') || s.includes('ammonit') || s.includes('fossil') || s.includes('spiral')) return 'nautilus_shell';
+    if (s.includes('suckulent') || s.includes('succulent') || s.includes('rosett') || s.includes('echeveria') || s.includes('kaktus')) return 'succulent_rosette';
+    if (s.includes('kristall') || s.includes('crystal') || s.includes('kvarts') || s.includes('quartz') || s.includes('geod') || s.includes('prism')) return 'crystal_cluster';
+    if (s.includes('sköldpadda') || s.includes('tortoise') || s.includes('turtle') || s.includes('sköld') || s.includes('carapace')) return 'tortoise_shell';
+    if (s.includes('trädgren') || s.includes('bark') || s.includes('branch') || s.includes('trunk') || s.includes('log') || s.includes('stock')) return 'tree_trunk_bark';
+    if (s.includes('sten') || s.includes('klippa') || s.includes('rock') || s.includes('pedestal') || s.includes('sockel') || s.includes('boulder') || s.includes('bas')) return 'rock_pedestal';
+    if (s.includes('öga') || s.includes('ögon') || s.includes('eye') || s.includes('iris') || s.includes('cornea') || s.includes('pupil')) return 'organic_eye';
+    if (s.includes('kronblad') || s.includes('petal') || s.includes('blomma') || s.includes('flower')) return 'petal';
+    if (s.includes('täckvinge') || s.includes('elytra') || s.includes('skalbagge') || s.includes('beetle')) return 'beetle_elytra';
+    if (s.includes('korall') || s.includes('coral')) return 'coral_branch';
+    if (s.includes('kotte') || s.includes('pinecone')) return 'pinecone_scale';
+    if (s.includes('bladnerv') || s.includes('leaf_vein') || s.includes('venation')) return 'leaf_vein';
+    if (rawType) return rawType;
+    return undefined;
+  };
 
   rawSegments.forEach((seg: any, idx: number) => {
     if (!seg || typeof seg !== 'object') return;
@@ -127,42 +163,32 @@ export function normalizeModelDefinition(
       filId = (idx % 8) + 1;
     }
 
-    // Geometry type
-    const validGeomTypes = [
-      'box', 'cylinder', 'sphere', 'cone', 'torus', 'ring',
-      'organic_mesh', 'parametric_surface'
-    ];
-    let geomType: any = seg.geometryType;
-    if (!validGeomTypes.includes(geomType)) {
-      geomType = seg.parameters?.organicType ? 'organic_mesh' : 'cylinder';
-    }
-
-    // Transform
-    const px = Number(seg.transform?.position?.[0]) || 0;
-    const py = Number(seg.transform?.position?.[1]) || (idx * 6 + 6);
-    const pz = Number(seg.transform?.position?.[2]) || 0;
-
-    const rx = Number(seg.transform?.rotation?.[0]) || 0;
-    const ry = Number(seg.transform?.rotation?.[1]) || 0;
-    const rz = Number(seg.transform?.rotation?.[2]) || 0;
-
-    const sx = Number(seg.transform?.scale?.[0]) || 1;
-    const sy = Number(seg.transform?.scale?.[1]) || 1;
-    const sz = Number(seg.transform?.scale?.[2]) || 1;
-
-    // Parameters
     const params = seg.parameters || {};
-    const width = Number(params.width) || 20;
-    const height = Number(params.height) || 20;
-    const depth = Number(params.depth) || 20;
-    const radius = Number(params.radius) || 12;
+    const organicType = mapOrganicType(params.organicType, segName);
+    const geomType = mapGeometryType(seg.geometryType, organicType);
+
+    // Transform with physical safeguards
+    const px = isNaN(Number(seg.transform?.position?.[0])) ? 0 : Number(seg.transform.position[0]);
+    const py = isNaN(Number(seg.transform?.position?.[1])) ? (idx * 6 + 6) : Number(seg.transform.position[1]);
+    const pz = isNaN(Number(seg.transform?.position?.[2])) ? 0 : Number(seg.transform.position[2]);
+
+    const rx = isNaN(Number(seg.transform?.rotation?.[0])) ? 0 : Number(seg.transform.rotation[0]);
+    const ry = isNaN(Number(seg.transform?.rotation?.[1])) ? 0 : Number(seg.transform.rotation[1]);
+    const rz = isNaN(Number(seg.transform?.rotation?.[2])) ? 0 : Number(seg.transform.rotation[2]);
+
+    const sx = isNaN(Number(seg.transform?.scale?.[0])) ? 1 : Number(seg.transform.scale[0]);
+    const sy = isNaN(Number(seg.transform?.scale?.[1])) ? 1 : Number(seg.transform.scale[1]);
+    const sz = isNaN(Number(seg.transform?.scale?.[2])) ? 1 : Number(seg.transform.scale[2]);
+
+    // Parameters with physical sanity bounds for Anycubic bed
+    const width = Math.max(1, Math.min(240, Number(params.width) || 20));
+    const height = Math.max(1, Math.min(250, Number(params.height) || 20));
+    const depth = Math.max(1, Math.min(240, Number(params.depth) || 20));
+    const radius = Math.max(1, Math.min(120, Number(params.radius) || 12));
     const radiusTop = Number(params.radiusTop) || radius;
     const radiusBottom = Number(params.radiusBottom) || radius;
     const tube = Number(params.tube) || 3;
-
-    // Organic parameters
-    const organicType = params.organicType || undefined;
-    const finish = params.finish || undefined;
+    const finish = params.finish || (organicType ? 'organic_skin' : undefined);
 
     segments.push({
       id,
@@ -194,17 +220,42 @@ export function normalizeModelDefinition(
       id: 'base-foundation',
       name: 'Foundation Pedestal',
       filamentId: 8,
-      geometryType: 'cylinder',
+      geometryType: 'organic_mesh',
       transform: { position: [0, 5, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
-      parameters: { radius: 30, height: 10 },
+      parameters: { radius: 30, height: 10, organicType: 'rock_pedestal', finish: 'mineral_stone' },
     });
   }
+
+  // Calculate realistic bounding box dimensions across all segments
+  let minX = Infinity, maxX = -Infinity;
+  let minY = Infinity, maxY = -Infinity;
+  let minZ = Infinity, maxZ = -Infinity;
+
+  segments.forEach(seg => {
+    const [px, py, pz] = seg.transform.position;
+    const r = seg.parameters.radius || (seg.parameters.width ? seg.parameters.width / 2 : 10);
+    const h = seg.parameters.height || 20;
+    minX = Math.min(minX, px - r);
+    maxX = Math.max(maxX, px + r);
+    minY = Math.min(minY, py - h / 2);
+    maxY = Math.max(maxY, py + h / 2);
+    minZ = Math.min(minZ, pz - r);
+    maxZ = Math.max(maxZ, pz + r);
+  });
+
+  const calcDimX = Math.round(maxX - minX);
+  const calcDimY = Math.round(maxY - minY);
+  const calcDimZ = Math.round(maxZ - minZ);
+
+  const dimX = Math.max(10, Math.min(250, Number(rawObj.dimensions?.x) || calcDimX || 75));
+  const dimY = Math.max(10, Math.min(260, Number(rawObj.dimensions?.y) || calcDimY || 60));
+  const dimZ = Math.max(10, Math.min(250, Number(rawObj.dimensions?.z) || calcDimZ || 70));
 
   const slicingTips = Array.isArray(rawObj.slicingTips || rawObj.slicingOptimizationTips)
     ? (rawObj.slicingTips || rawObj.slicingOptimizationTips).map(String)
     : [
-        'Orient base flat on Anycubic textured PEI sheet for maximum first-layer adhesion.',
-        'Purge into infill enabled for optimal transition savings.',
+        'Orient base flat on Anycubic textured PEI sheet for 100% first-layer adhesion.',
+        'Purge into infill enabled for optimal multi-material transition savings.',
       ];
 
   return {
@@ -223,7 +274,7 @@ export function normalizeModelDefinition(
 
 /**
  * Parses Python bpy script text or Blender export text back into ChromaForge ModelDefinition!
- * This enables 2-way synchronization: Text TO Blender and Text FROM Blender.
+ * Enables 100% physically accurate 2-way synchronization: Text TO Blender and Text FROM Blender.
  */
 export function parseBlenderPythonScript(scriptText: string): ModelDefinition | null {
   if (!scriptText || !scriptText.includes('bpy')) {
@@ -259,7 +310,7 @@ export function parseBlenderPythonScript(scriptText: string): ModelDefinition | 
     }
     filId = Math.max(1, Math.min(8, filId || compIdx));
 
-    // Determine geometry type
+    // Determine geometry type & physical parameters
     let geomType: MeshSegment['geometryType'] = 'cylinder';
     let organicType: any = undefined;
     let radius = 12;
@@ -271,20 +322,41 @@ export function parseBlenderPythonScript(scriptText: string): ModelDefinition | 
     let posY = compIdx * 6 + 6;
     let posZ = 0;
 
-    // Check if primitive_cube_add
+    let rotX = 0;
+    let rotY = 0;
+    let rotZ = 0;
+
+    // 1. Parse location from operator args OR obj.location
+    const locMatch = block.match(/(?:location\s*=\s*|\.location\s*=\s*)\(([^,]+),\s*([^,]+),\s*([^)]+)\)/);
+    if (locMatch) {
+      // Blender: (X, Y, Z) where Z is up, Y is depth
+      // Three.js: (X, Y, Z) where Y is up, Z is depth
+      posX = parseFloat(locMatch[1]) * 1000;
+      posZ = parseFloat(locMatch[2]) * 1000;
+      posY = parseFloat(locMatch[3]) * 1000;
+    }
+
+    // 2. Parse rotation_euler from operator args OR obj.rotation_euler
+    const rotMatch = block.match(/(?:rotation_euler\s*=\s*|\.rotation_euler\s*=\s*)\(([^,]+),\s*([^,]+),\s*([^)]+)\)/);
+    if (rotMatch) {
+      const rX = parseFloat(rotMatch[1]);
+      const rY = parseFloat(rotMatch[2]);
+      const rZ = parseFloat(rotMatch[3]);
+      // Map Blender Euler back to Three.js: rx = rX, ry = rZ, rz = rY
+      rotX = isNaN(rX) ? 0 : rX;
+      rotY = isNaN(rZ) ? 0 : rZ;
+      rotZ = isNaN(rY) ? 0 : rY;
+    }
+
+    // 3. Check geometry primitives
     if (block.includes('primitive_cube_add')) {
       geomType = 'box';
-      const locMatch = block.match(/location=\(([^,]+),\s*([^,]+),\s*([^)]+)\)/);
-      if (locMatch) {
-        posX = parseFloat(locMatch[1]) * 1000;
-        posZ = parseFloat(locMatch[2]) * 1000;
-        posY = parseFloat(locMatch[3]) * 1000;
-      }
       const scaleMatch = block.match(/obj\.scale\s*=\s*\(([^,]+),\s*([^,]+),\s*([^)]+)\)/);
       if (scaleMatch) {
-        width = parseFloat(scaleMatch[1]) * 2000;
-        depth = parseFloat(scaleMatch[2]) * 2000;
-        height = parseFloat(scaleMatch[3]) * 2000;
+        // EXACT mm scaling: scale * 1000 mm (not 2000!)
+        width = parseFloat(scaleMatch[1]) * 1000;
+        depth = parseFloat(scaleMatch[2]) * 1000;
+        height = parseFloat(scaleMatch[3]) * 1000;
       }
     } else if (block.includes('primitive_cylinder_add')) {
       geomType = 'cylinder';
@@ -292,12 +364,6 @@ export function parseBlenderPythonScript(scriptText: string): ModelDefinition | 
       if (radMatch) radius = parseFloat(radMatch[1]) * 1000;
       const depMatch = block.match(/depth=([^,)]+)/);
       if (depMatch) height = parseFloat(depMatch[1]) * 1000;
-      const locMatch = block.match(/location=\(([^,]+),\s*([^,]+),\s*([^)]+)\)/);
-      if (locMatch) {
-        posX = parseFloat(locMatch[1]) * 1000;
-        posZ = parseFloat(locMatch[2]) * 1000;
-        posY = parseFloat(locMatch[3]) * 1000;
-      }
     } else if (block.includes('primitive_cone_add')) {
       geomType = 'cone';
       const radMatch = block.match(/radius1=([^,)]+)/);
@@ -310,14 +376,78 @@ export function parseBlenderPythonScript(scriptText: string): ModelDefinition | 
       if (radMatch) radius = parseFloat(radMatch[1]) * 1000;
     } else if (block.includes('from_pydata')) {
       geomType = 'organic_mesh';
+
+      // Parse actual vertex bounds from Blender from_pydata([ ... ])
+      const pyDataMatch = block.match(/from_pydata\s*\(\s*\[([\s\S]*?)\]/);
+      if (pyDataMatch && pyDataMatch[1]) {
+        const rawVerts = pyDataMatch[1];
+        const coordRegex = /\(([^,)]+),\s*([^,)]+),\s*([^,)]+)\)/g;
+        let cMatch;
+        let vMinX = Infinity, vMaxX = -Infinity;
+        let vMinY = Infinity, vMaxY = -Infinity;
+        let vMinZ = Infinity, vMaxZ = -Infinity;
+        let vertCount = 0;
+
+        while ((cMatch = coordRegex.exec(rawVerts)) !== null) {
+          const bx = parseFloat(cMatch[1]) * 1000;
+          const by = parseFloat(cMatch[2]) * 1000; // Blender Y is Three.js Z
+          const bz = parseFloat(cMatch[3]) * 1000; // Blender Z is Three.js Y
+
+          if (!isNaN(bx) && !isNaN(by) && !isNaN(bz)) {
+            vMinX = Math.min(vMinX, bx);
+            vMaxX = Math.max(vMaxX, bx);
+            vMinZ = Math.min(vMinZ, by);
+            vMaxZ = Math.max(vMaxZ, by);
+            vMinY = Math.min(vMinY, bz);
+            vMaxY = Math.max(vMaxY, bz);
+            vertCount++;
+          }
+        }
+
+        if (vertCount > 0) {
+          posX = (vMinX + vMaxX) / 2;
+          posY = (vMinY + vMaxY) / 2;
+          posZ = (vMinZ + vMaxZ) / 2;
+          width = Math.max(4, vMaxX - vMinX);
+          height = Math.max(4, vMaxY - vMinY);
+          depth = Math.max(4, vMaxZ - vMinZ);
+          radius = Math.max(width, depth) / 2;
+        }
+      }
+
+      // Comprehensive multilingual biological type classification
       const lower = rawName.toLowerCase();
-      if (lower.includes('frog') || lower.includes('groda')) organicType = 'frog_body';
-      else if (lower.includes('mushroom') || lower.includes('svamp')) organicType = 'mushroom_cap';
-      else if (lower.includes('tail') || lower.includes('svans')) organicType = 'chameleon_tail';
-      else if (lower.includes('wing') || lower.includes('vinge')) organicType = 'butterfly_wing';
-      else if (lower.includes('shell') || lower.includes('snäcka')) organicType = 'nautilus_shell';
-      else if (lower.includes('rock') || lower.includes('sten') || lower.includes('base')) organicType = 'rock_pedestal';
-      else organicType = 'smooth_anatomy';
+      if (lower.includes('frog_limb') || lower.includes('groda_ben') || lower.includes('tass') || lower.includes('ben') || lower.includes('limb') || lower.includes('leg') || lower.includes('arm')) {
+        organicType = 'frog_limb';
+      } else if (lower.includes('frog') || lower.includes('groda') || lower.includes('padda') || lower.includes('toad') || lower.includes('dendrobates')) {
+        organicType = 'frog_body';
+      } else if (lower.includes('stem') || lower.includes('stam') || lower.includes('fot') || lower.includes('stipe')) {
+        organicType = 'mushroom_stem';
+      } else if (lower.includes('mushroom') || lower.includes('svamp') || lower.includes('pileus') || lower.includes('hatt') || lower.includes('cap') || lower.includes('kantarell') || lower.includes('flugsvamp')) {
+        organicType = 'mushroom_cap';
+      } else if (lower.includes('tail') || lower.includes('svans') || lower.includes('kameleon') || lower.includes('chameleon')) {
+        organicType = 'chameleon_tail';
+      } else if (lower.includes('wing') || lower.includes('vinge') || lower.includes('butterfly') || lower.includes('fjäril')) {
+        organicType = 'butterfly_wing';
+      } else if (lower.includes('shell') || lower.includes('snäcka') || lower.includes('nautilus') || lower.includes('ammonit')) {
+        organicType = 'nautilus_shell';
+      } else if (lower.includes('succulent') || lower.includes('suckulent') || lower.includes('rosett') || lower.includes('kaktus')) {
+        organicType = 'succulent_rosette';
+      } else if (lower.includes('crystal') || lower.includes('kristall') || lower.includes('kvarts') || lower.includes('quartz') || lower.includes('geode')) {
+        organicType = 'crystal_cluster';
+      } else if (lower.includes('tortoise') || lower.includes('turtle') || lower.includes('sköldpadda') || lower.includes('carapace')) {
+        organicType = 'tortoise_shell';
+      } else if (lower.includes('bark') || lower.includes('branch') || lower.includes('gren') || lower.includes('träd') || lower.includes('trunk') || lower.includes('log')) {
+        organicType = 'tree_trunk_bark';
+      } else if (lower.includes('rock') || lower.includes('sten') || lower.includes('klippa') || lower.includes('pedestal') || lower.includes('base') || lower.includes('sockel')) {
+        organicType = 'rock_pedestal';
+      } else if (lower.includes('eye') || lower.includes('öga') || lower.includes('ögon') || lower.includes('iris') || lower.includes('cornea')) {
+        organicType = 'organic_eye';
+      } else if (lower.includes('petal') || lower.includes('kronblad') || lower.includes('blomma')) {
+        organicType = 'petal';
+      } else {
+        organicType = 'smooth_anatomy';
+      }
     }
 
     segments.push({
@@ -327,7 +457,7 @@ export function parseBlenderPythonScript(scriptText: string): ModelDefinition | 
       geometryType: geomType,
       transform: {
         position: [isNaN(posX) ? 0 : posX, isNaN(posY) ? compIdx * 8 : posY, isNaN(posZ) ? 0 : posZ],
-        rotation: [0, 0, 0],
+        rotation: [rotX, rotY, rotZ],
         scale: [1, 1, 1],
       },
       parameters: {

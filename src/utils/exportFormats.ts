@@ -28,10 +28,12 @@ function generateMeshTriangles(segment: MeshSegment): {
   vertices: [number, number, number][];
   indices: [number, number, number][];
 } {
-  // If organic mesh or natural biological structure, use high-detail organic generator
+  // If organic mesh, natural biological structure, or custom relief geometry, use high-detail organic generator
   if (
     segment.geometryType === 'organic_mesh' ||
     segment.geometryType === 'parametric_surface' ||
+    segment.geometryType === 'relief_mesh' ||
+    segment.parameters.customGeometry ||
     segment.parameters.organicType
   ) {
     return getOrganicTriangles(segment);
@@ -317,12 +319,18 @@ export function generateBlenderPythonScript(
 ): string {
   const segmentsCode = model.segments.map((seg, idx) => {
     const [px, py, pz] = seg.transform.position;
+    const [rx, ry, rz] = seg.transform.rotation;
     const [sx, sy, sz] = seg.transform.scale;
     const fil = filaments.find(f => f.id === seg.filamentId) || filaments[0];
     const [r, g, b] = hexToRgbFloat(fil.color);
 
     let addMeshCode = '';
-    const isOrganic = seg.geometryType === 'organic_mesh' || seg.parameters.organicType;
+    const isOrganic =
+      seg.geometryType === 'organic_mesh' ||
+      seg.geometryType === 'parametric_surface' ||
+      seg.geometryType === 'relief_mesh' ||
+      !!seg.parameters.customGeometry ||
+      !!seg.parameters.organicType;
 
     if (isOrganic) {
       const { vertices: orgVerts, indices: orgFaces } = getOrganicTriangles(seg);
@@ -330,35 +338,42 @@ export function generateBlenderPythonScript(
       const vertsStr = orgVerts.map(v => `(${v[0] / 1000}, ${v[2] / 1000}, ${v[1] / 1000})`).join(', ');
       const facesStr = orgFaces.map(f => `(${f[0]}, ${f[1]}, ${f[2]})`).join(', ');
 
+      const isRelief = seg.geometryType === 'relief_mesh' || !!seg.parameters.customGeometry;
       addMeshCode = `mesh_data = bpy.data.meshes.new("${seg.name.replace(/[^a-zA-Z0-9_]/g, '_')}_mesh")
     mesh_data.from_pydata([${vertsStr}], [], [${facesStr}])
-    mesh_data.update()
+    mesh_data.validate(verbose=False)
+    mesh_data.update(calc_edges=True)
     obj = bpy.data.objects.new("${seg.name.replace(/[^a-zA-Z0-9_]/g, '_')}_Slot${seg.filamentId}", mesh_data)
-    bpy.context.collection.objects.link(obj)
-    # Add Subsurf modifier for ultra-smooth biological realism
-    subsurf = obj.modifiers.new("Subsurf", "SUBSURF")
-    subsurf.levels = 1`;
+    chroma_col.objects.link(obj)${
+      isRelief
+        ? ''
+        : `\n    # Add Subsurf modifier for ultra-smooth biological realism\n    subsurf = obj.modifiers.new("Subsurf", "SUBSURF")\n    subsurf.levels = 1`
+    }`;
     } else if (seg.geometryType === 'box') {
       const w = ((seg.parameters.width || 20) * sx) / 1000; // Blender uses meters by default
       const h = ((seg.parameters.height || 20) * sy) / 1000;
       const d = ((seg.parameters.depth || 20) * sz) / 1000;
       addMeshCode = `bpy.ops.mesh.primitive_cube_add(size=1.0, location=(${px / 1000}, ${pz / 1000}, ${py / 1000}))
     obj = bpy.context.active_object
-    obj.scale = (${w}, ${d}, ${h})`;
+    obj.scale = (${w}, ${d}, ${h})
+    obj.rotation_euler = (${rx}, ${rz}, ${ry})`;
     } else if (seg.geometryType === 'cylinder') {
       const rad = ((seg.parameters.radius || 10) * sx) / 1000;
       const dep = ((seg.parameters.height || 20) * sy) / 1000;
       addMeshCode = `bpy.ops.mesh.primitive_cylinder_add(radius=${rad}, depth=${dep}, location=(${px / 1000}, ${pz / 1000}, ${py / 1000}))
-    obj = bpy.context.active_object`;
+    obj = bpy.context.active_object
+    obj.rotation_euler = (${rx}, ${rz}, ${ry})`;
     } else if (seg.geometryType === 'cone') {
       const rad = ((seg.parameters.radius || 10) * sx) / 1000;
       const dep = ((seg.parameters.height || 20) * sy) / 1000;
       addMeshCode = `bpy.ops.mesh.primitive_cone_add(radius1=${rad}, depth=${dep}, location=(${px / 1000}, ${pz / 1000}, ${py / 1000}))
-    obj = bpy.context.active_object`;
+    obj = bpy.context.active_object
+    obj.rotation_euler = (${rx}, ${rz}, ${ry})`;
     } else {
       const rad = ((seg.parameters.radius || 12) * sx) / 1000;
       addMeshCode = `bpy.ops.mesh.primitive_uv_sphere_add(radius=${rad}, location=(${px / 1000}, ${pz / 1000}, ${py / 1000}))
-    obj = bpy.context.active_object`;
+    obj = bpy.context.active_object
+    obj.rotation_euler = (${rx}, ${rz}, ${ry})`;
     }
 
     return `
@@ -376,13 +391,15 @@ export function generateBlenderPythonScript(
     # Apply Smooth Shading for natural biological curvature
     bpy.context.view_layer.objects.active = obj
     obj.select_set(True)
-    bpy.ops.object.shade_smooth()
+    try:
+        bpy.ops.object.shade_smooth()
+    except Exception:
+        for p in obj.data.polygons:
+            p.use_smooth = True
     
-    # Link to ChromaForge Collection
+    # Guarantee placement inside ChromaForge Collection
     if obj.name not in chroma_col.objects:
         chroma_col.objects.link(obj)
-    if obj.name in bpy.context.scene.collection.objects:
-        bpy.context.scene.collection.objects.unlink(obj)
 `;
   }).join('\n');
 
@@ -446,6 +463,21 @@ def build_chromaforge_model():
     else:
         chroma_col = bpy.data.collections.new(collection_name)
         bpy.context.scene.collection.children.link(chroma_col)
+    
+    # 3. Make ChromaForge collection the active layer collection so all operators create objects inside it
+    try:
+        def find_layer_col(layer_col, target_name):
+            if layer_col.name == target_name:
+                return layer_col
+            for ch in layer_col.children:
+                res = find_layer_col(ch, target_name)
+                if res: return res
+            return None
+        target_lc = find_layer_col(bpy.context.view_layer.layer_collection, chroma_col.name)
+        if target_lc:
+            bpy.context.view_layer.active_layer_collection = target_lc
+    except Exception:
+        pass
     
     print("Building model: ${model.name} with ${model.segments.length} multi-material segments...")
 ${segmentsCode}

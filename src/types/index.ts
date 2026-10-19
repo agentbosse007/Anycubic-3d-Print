@@ -48,7 +48,8 @@ export interface MeshSegment {
     | 'lathe'
     | 'extrude_spline'
     | 'parametric_surface'
-    | 'voronoi_organic';
+    | 'voronoi_organic'
+    | 'relief_mesh';
   transform: {
     position: [number, number, number];
     rotation: [number, number, number];
@@ -94,6 +95,10 @@ export interface MeshSegment {
     subdivisions?: number;
     taper?: number;
     points?: [number, number][];
+    customGeometry?: {
+      vertices: [number, number, number][];
+      indices: [number, number, number][];
+    };
     finish?:
       | 'organic_skin'
       | 'matte_feather'
@@ -115,7 +120,9 @@ export interface ModelDefinition {
   segments: MeshSegment[];
   blenderPythonScript: string;
   slicingTips?: string[];
-  generatedBy: 'ollama' | 'gemini' | 'preset';
+  generatedBy: 'ollama' | 'gemini' | 'preset' | 'image_to_3d';
+  sourceImageUrl?: string;
+  detectedSubject?: string;
   createdAt: string;
 }
 
@@ -146,6 +153,20 @@ export interface BleedRiskItem {
   description: string;
 }
 
+export interface ChannelFilamentConsumption {
+  channelId: number;
+  channelName: string;
+  color: string;
+  material: string;
+  modelGrams: number;
+  purgeGrams: number;
+  totalGrams: number;
+  spoolGramsRemaining: number;
+  percentOfSpoolUsed: number;
+  remainingAfterPrintGrams: number;
+  isSufficient: boolean;
+}
+
 export interface SlicingAnalysis {
   totalLayers: number;
   totalHeightMm: number;
@@ -160,6 +181,10 @@ export interface SlicingAnalysis {
   toolChangeLayers: { layer: number; heightMm: number; fromSlot: number; toSlot: number }[];
   bleedRisks: BleedRiskItem[];
   hasCriticalBleed: boolean;
+  channelConsumptions: ChannelFilamentConsumption[];
+  totalSpoolCapacityGrams: number;
+  spoolConsumptionPercent: number;
+  hasInsufficientSpool: boolean;
 }
 
 export interface OllamaState {

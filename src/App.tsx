@@ -15,6 +15,7 @@ import { BlenderBridgePanel } from './components/BlenderBridgePanel';
 import { SegmentInspector } from './components/SegmentInspector';
 import { AnycubicGuideModal } from './components/AnycubicGuideModal';
 import { CreatorInfoModal } from './components/CreatorInfoModal';
+import { ImageTo3DModal } from './components/ImageTo3DModal';
 
 import {
   Layers,
@@ -29,7 +30,15 @@ import {
   ChevronDown,
   Globe,
   Languages,
-  Check
+  Check,
+  Scale,
+  Clock,
+  AlertTriangle,
+  AlertCircle,
+  CheckCircle2,
+  ChevronUp,
+  X,
+  Image as ImageIcon
 } from 'lucide-react';
 
 export default function App() {
@@ -57,6 +66,7 @@ export default function App() {
 
   // 2. Modals & UI States
   const [isCreatorInfoOpen, setIsCreatorInfoOpen] = useState<boolean>(false);
+  const [isImageTo3DOpen, setIsImageTo3DOpen] = useState<boolean>(false);
   const [isLangMenuOpen, setIsLangMenuOpen] = useState<boolean>(false);
   const [externalPrompt, setExternalPrompt] = useState<string>('');
 
@@ -87,6 +97,7 @@ export default function App() {
   const [isGuideOpen, setIsGuideOpen] = useState<boolean>(false);
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [isDownloading3mf, setIsDownloading3mf] = useState<boolean>(false);
+  const [showSpoolBreakdown, setShowSpoolBreakdown] = useState<boolean>(false);
 
   const activeFilaments = useMemo(() => filaments.slice(0, maxColors), [filaments, maxColors]);
 
@@ -94,6 +105,13 @@ export default function App() {
   const slicingAnalysis = useMemo(() => {
     return analyzeMultiMaterialSlicing(currentModel.segments, activeFilaments, slicingConfig);
   }, [currentModel, activeFilaments, slicingConfig]);
+
+  // Selected filament channels used in the current model
+  const activeSelectedChannels = useMemo(() => {
+    const usedIds = new Set(currentModel.segments.map(s => s.filamentId));
+    const matched = slicingAnalysis.channelConsumptions.filter(c => usedIds.has(c.channelId));
+    return matched.length > 0 ? matched : slicingAnalysis.channelConsumptions.slice(0, maxColors);
+  }, [slicingAnalysis.channelConsumptions, currentModel.segments, maxColors]);
 
   // 5. Handlers
   const handleUpdateFilament = (updated: FilamentChannel) => {
@@ -256,6 +274,18 @@ export default function App() {
             <span>{t.btnKobraSpecs}</span>
           </button>
 
+          {/* Bild till 3D Studio Trigger Button */}
+          <button
+            onClick={() => setIsImageTo3DOpen(true)}
+            className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 text-xs text-emerald-300 hover:text-white bg-emerald-950/40 hover:bg-emerald-900/60 rounded-lg border border-emerald-500/40 hover:border-emerald-400 transition-all shadow-sm whitespace-nowrap cursor-pointer group"
+            title="Konvertera bild, foto eller skiss till ett fullvärdigt 3D-objekt för Anycubic Kobra 3"
+          >
+            <ImageIcon className="w-3.5 h-3.5 text-emerald-400 group-hover:scale-110 transition-transform" />
+            <span className="font-semibold tracking-wide text-[11px] sm:text-xs">
+              {t.btnImageTo3D || 'Bild till 3D'}
+            </span>
+          </button>
+
           {/* Anycubic 3MF Export Button */}
           <button
             onClick={handleExport3MF}
@@ -281,6 +311,7 @@ export default function App() {
         lang={currentLang}
         externalPrompt={externalPrompt}
         onClearExternalPrompt={() => setExternalPrompt('')}
+        onOpenImageTo3D={() => setIsImageTo3DOpen(true)}
       />
 
       {/* 3. MAIN WORKSPACE: Viewport (Left) + Engineering Slicing & Bridge Sidebar (Right) */}
@@ -291,7 +322,13 @@ export default function App() {
           <div className="h-10 bg-slate-900/60 border-b border-slate-800 px-4 flex items-center justify-between text-xs shrink-0">
             <div className="flex items-center gap-2">
               <span className="text-slate-400 font-medium">{t.modelLabel || 'Modell:'}</span>
-              <span className="font-semibold text-white truncate max-w-[200px] sm:max-w-xs">{currentModel.name}</span>
+              <span className="font-semibold text-white truncate max-w-[180px] sm:max-w-xs">{currentModel.name}</span>
+              {currentModel.sourceImageUrl && (
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/30 text-[10px] text-emerald-300 font-medium">
+                  <ImageIcon className="w-2.5 h-2.5 text-emerald-400" />
+                  <span>Bildmodell</span>
+                </span>
+              )}
               <span className="text-slate-500" aria-hidden="true">·</span>
               <span className="text-slate-400 font-mono tabular-nums text-[11px]">
                 {currentModel.segments.length} {t.partsLabel || 'delar'} ({currentModel.dimensions.x}×{currentModel.dimensions.y}×{currentModel.dimensions.z}mm)
@@ -333,29 +370,221 @@ export default function App() {
               onAssignFilamentToSegment={handleAssignFilamentToSegment}
               onAutoFixBleed={handleAutoFixBleed}
               activeFilamentSlot={activeFilamentSlot}
+              lang={currentLang}
             />
           </div>
 
-          {/* Bottom Slicing Telemetry Ribbon */}
-          <div className="bg-slate-900/90 border-t border-slate-800 px-4 py-2 flex flex-wrap items-center justify-between gap-3 text-xs shrink-0">
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-1 text-slate-400">
-                <Printer className="w-3.5 h-3.5 text-cyan-400" />
-                <span className="font-mono text-white tabular-nums">{printer.name}</span>
+          {/* Detailed Spool Consumption Breakdown Popover */}
+          {showSpoolBreakdown && (
+            <div className="absolute bottom-14 left-2 right-2 sm:left-4 sm:right-auto sm:w-[480px] z-30 bg-slate-900/98 backdrop-blur-xl border border-cyan-500/40 rounded-xl shadow-2xl p-4 flex flex-col gap-3 text-xs">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 rounded-lg bg-cyan-500/15 border border-cyan-500/30 text-cyan-400">
+                    <Scale className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-white text-xs tracking-wide">
+                        {t.spoolProgressTitle || 'Spolkapacitet & Åtgång'}
+                      </span>
+                      <span className="px-1.5 py-0.2 rounded text-[10px] font-mono bg-slate-800 text-slate-300 border border-slate-700">
+                        {activeSelectedChannels.length} {t.activeChannelsLabel || 'valda kanaler'}
+                      </span>
+                    </div>
+                    <span className="text-[10px] text-slate-400 font-mono">
+                      {printer.name} · ACE Pro
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {slicingAnalysis.hasInsufficientSpool ? (
+                    <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40">
+                      <AlertCircle className="w-3 h-3 text-rose-400" />
+                      {t.spoolStatusInsufficient || 'Kräver spolbyte!'}
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                      <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                      {t.spoolStatusSafe || 'Tillräckligt filament'}
+                    </span>
+                  )}
+                  <button
+                    onClick={() => setShowSpoolBreakdown(false)}
+                    className="p-1 text-slate-400 hover:text-white hover:bg-slate-800 rounded transition-colors cursor-pointer"
+                    title="Close"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
-              <span className="text-slate-600" aria-hidden="true">·</span>
-              <div className="flex items-center gap-1 text-slate-400">
+
+              {/* Overall Total Consumption vs Spool Bar */}
+              <div className="p-2.5 rounded-lg bg-slate-950/80 border border-slate-800 flex flex-col gap-2">
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="text-slate-300 font-medium">
+                    {t.usedVsCapacity || 'Förbrukning mot kvarvarande spolar'}:
+                  </span>
+                  <div className="flex items-center gap-1.5 font-mono">
+                    <span className="text-white font-bold tabular-nums">{slicingAnalysis.totalFilamentGrams}g</span>
+                    <span className="text-slate-500">/</span>
+                    <span className="text-slate-300 tabular-nums">{slicingAnalysis.totalSpoolCapacityGrams.toLocaleString()}g</span>
+                    <span className="text-cyan-400 font-semibold tabular-nums">({slicingAnalysis.spoolConsumptionPercent.toFixed(1)}%)</span>
+                  </div>
+                </div>
+
+                {/* Overall Spool Bar */}
+                <div className="h-3.5 w-full bg-slate-900 rounded-full border border-slate-800 overflow-hidden flex relative p-0.5">
+                  <div
+                    className="h-full rounded-full flex overflow-hidden transition-all duration-300 shadow-sm"
+                    style={{ width: `${Math.max(2, Math.min(100, slicingAnalysis.spoolConsumptionPercent))}%` }}
+                  >
+                    {activeSelectedChannels.map(ch => {
+                      const sharePct = slicingAnalysis.totalFilamentGrams > 0
+                        ? (ch.totalGrams / slicingAnalysis.totalFilamentGrams) * 100
+                        : 0;
+                      return (
+                        <div
+                          key={ch.channelId}
+                          className="h-full relative group transition-all"
+                          style={{
+                            width: `${sharePct}%`,
+                            backgroundColor: ch.color,
+                            boxShadow: `0 0 6px ${ch.color}55`,
+                          }}
+                          title={`Kanal ${ch.channelId} (${ch.channelName}): ${ch.totalGrams}g`}
+                        />
+                      );
+                    })}
+                  </div>
+                  {/* Subtle 25%, 50%, 75% marks */}
+                  <div className="absolute inset-y-0 left-1/4 w-px bg-slate-800/80 pointer-events-none" />
+                  <div className="absolute inset-y-0 left-1/2 w-px bg-slate-800/80 pointer-events-none" />
+                  <div className="absolute inset-y-0 left-3/4 w-px bg-slate-800/80 pointer-events-none" />
+                </div>
+
+                <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono">
+                  <span>Modell: {slicingAnalysis.modelFilamentGrams}g + Spill: {slicingAnalysis.purgeWasteGrams}g</span>
+                  <span className="text-emerald-400">Kvar efter utskrift: {(slicingAnalysis.totalSpoolCapacityGrams - slicingAnalysis.totalFilamentGrams).toFixed(1)}g</span>
+                </div>
+              </div>
+
+              {/* Per-Channel Spool List */}
+              <div className="flex flex-col gap-2 max-h-56 overflow-y-auto pr-1">
+                {activeSelectedChannels.map(ch => {
+                  const isLow = ch.remainingAfterPrintGrams < 60 && ch.isSufficient;
+                  const isCritical = !ch.isSufficient;
+
+                  return (
+                    <div
+                      key={ch.channelId}
+                      className={`p-2 rounded-lg border flex flex-col gap-1.5 transition-all ${
+                        isCritical
+                          ? 'bg-rose-950/30 border-rose-500/40'
+                          : isLow
+                          ? 'bg-amber-950/20 border-amber-500/30'
+                          : 'bg-slate-950/60 border-slate-800'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between text-[11px]">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span
+                            className="w-3 h-3 rounded-full shrink-0 border border-slate-600 shadow-sm"
+                            style={{ backgroundColor: ch.color }}
+                          />
+                          <span className="font-semibold text-white truncate">
+                            Slot {ch.channelId}: {ch.channelName}
+                          </span>
+                          <span className="text-[10px] text-slate-400 font-mono shrink-0">
+                            ({ch.material})
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 shrink-0 font-mono">
+                          <span className="text-white font-bold tabular-nums">
+                            {ch.totalGrams}g
+                          </span>
+                          <span className="text-slate-500">/</span>
+                          <span className="text-slate-300 tabular-nums">
+                            {ch.spoolGramsRemaining}g
+                          </span>
+                          <span className={`text-[10px] px-1.5 py-0.2 rounded font-semibold ${
+                            isCritical
+                              ? 'bg-rose-500/20 text-rose-300'
+                              : isLow
+                              ? 'bg-amber-500/20 text-amber-300'
+                              : 'bg-cyan-500/15 text-cyan-300'
+                          }`}>
+                            {ch.percentOfSpoolUsed.toFixed(1)}%
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Channel progress bar */}
+                      <div className="h-2 w-full bg-slate-900 rounded-full border border-slate-800/80 overflow-hidden flex relative p-0.5">
+                        <div
+                          className={`h-full rounded-full transition-all duration-300 ${
+                            isCritical ? 'bg-rose-500' : ''
+                          }`}
+                          style={{
+                            width: `${Math.max(3, Math.min(100, ch.percentOfSpoolUsed))}%`,
+                            backgroundColor: isCritical ? undefined : ch.color,
+                          }}
+                        />
+                      </div>
+
+                      <div className="flex items-center justify-between text-[10px] font-mono">
+                        <span className="text-slate-400">
+                          Modell: {ch.modelGrams}g · Spill: {ch.purgeGrams}g
+                        </span>
+                        <span className={isCritical ? 'text-rose-400 font-bold' : isLow ? 'text-amber-400 font-bold' : 'text-slate-400'}>
+                          {isCritical
+                            ? `Saknas ${(ch.totalGrams - ch.spoolGramsRemaining).toFixed(1)}g!`
+                            : `${ch.remainingAfterPrintGrams}g ${t.remainingAfter || 'kvar'}`}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Bottom Slicing Telemetry Ribbon */}
+          <div className="bg-slate-900/95 backdrop-blur-md border-t border-slate-800 px-4 py-2.5 flex flex-wrap lg:flex-nowrap items-center justify-between gap-3 text-xs shrink-0 relative z-20">
+            {/* Left Section: Slicing stats */}
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-slate-400">
+              <div className="flex items-center gap-1.5 text-white font-medium">
+                <Printer className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                <span className="font-mono text-white tabular-nums font-semibold">{printer.name}</span>
+              </div>
+              <span className="text-slate-600 hidden sm:inline" aria-hidden="true">·</span>
+
+              <div className="flex items-center gap-1">
                 <span>{t.totalToolSwaps || 'Verktygsväxlingar'}:</span>
                 <span className="font-mono text-cyan-400 font-semibold tabular-nums">{slicingAnalysis.toolChangesCount}</span>
               </div>
-              <span className="text-slate-600" aria-hidden="true">·</span>
-              <div className="flex items-center gap-1 text-slate-400">
+              <span className="text-slate-600 hidden sm:inline" aria-hidden="true">·</span>
+
+              <div className="flex items-center gap-1">
                 <span>{t.totalPurgeWaste || 'Färgspill'}:</span>
                 <span className="font-mono text-amber-400 font-semibold tabular-nums">{slicingAnalysis.purgeWasteGrams}g</span>
               </div>
+              <span className="text-slate-600 hidden sm:inline" aria-hidden="true">·</span>
+
+              <div className="flex items-center gap-1 font-mono text-[11px] text-emerald-400">
+                <span>-{slicingAnalysis.infillSavingsGrams}g saved ({t.purgeIntoInfill || 'Infill'})</span>
+              </div>
+              <span className="text-slate-600 hidden sm:inline" aria-hidden="true">·</span>
+
+              <div className="flex items-center gap-1 font-mono text-[11px] text-slate-300">
+                <Clock className="w-3 h-3 text-slate-400 shrink-0" />
+                <span className="tabular-nums">{t.totalPrintTime || 'Tid'}: {Math.floor(slicingAnalysis.estimatedPrintMinutes / 60)}h {slicingAnalysis.estimatedPrintMinutes % 60}m</span>
+              </div>
+
               {slicingAnalysis.bleedRisks.length > 0 && (
                 <>
-                  <span className="text-slate-600" aria-hidden="true">·</span>
+                  <span className="text-slate-600 hidden sm:inline" aria-hidden="true">·</span>
                   <div className="flex items-center gap-1 text-amber-400 font-semibold">
                     <span>⚠️ {slicingAnalysis.bleedRisks.length} {t.bleedSimulation || 'Färgblödning'}</span>
                   </div>
@@ -363,10 +592,93 @@ export default function App() {
               )}
             </div>
 
-            <div className="flex items-center gap-3 font-mono text-[11px]">
-              <span className="text-emerald-400">-{slicingAnalysis.infillSavingsGrams}g saved ({t.purgeIntoInfill || 'Infill'})</span>
-              <span className="text-slate-600" aria-hidden="true">·</span>
-              <span className="text-slate-300 tabular-nums">{t.totalPrintTime || 'Tid'}: {Math.floor(slicingAnalysis.estimatedPrintMinutes / 60)}h {slicingAnalysis.estimatedPrintMinutes % 60}m</span>
+            {/* Right Section: Visual Progress Bar indicating total filament consumption vs remaining spool capacity */}
+            <div className="flex items-center gap-2.5 ml-auto shrink-0">
+              <button
+                onClick={() => setShowSpoolBreakdown(!showSpoolBreakdown)}
+                className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg border transition-all cursor-pointer ${
+                  showSpoolBreakdown
+                    ? 'bg-slate-800 border-cyan-500/50 shadow-md ring-1 ring-cyan-500/30'
+                    : 'bg-slate-950/70 hover:bg-slate-800/80 border-slate-800 hover:border-slate-700'
+                }`}
+                title={t.toggleSpoolDetails || 'Klicka för att visa detaljerad spolkapacitet och förbrukning per kanal'}
+              >
+                {/* Spool status icon */}
+                {slicingAnalysis.hasInsufficientSpool ? (
+                  <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 animate-pulse" />
+                ) : (
+                  <Scale className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                )}
+
+                {/* Text readouts */}
+                <div className="flex items-center gap-1.5 font-mono text-xs">
+                  <span className="text-slate-400 font-sans hidden sm:inline">
+                    {t.filamentConsumption || 'Filament'}:
+                  </span>
+                  <span className="font-bold text-white tabular-nums">
+                    {slicingAnalysis.totalFilamentGrams}g
+                  </span>
+                  <span className="text-slate-600">/</span>
+                  <span className="text-slate-300 tabular-nums font-medium">
+                    {slicingAnalysis.totalSpoolCapacityGrams.toLocaleString()}g
+                  </span>
+                  <span className={`font-semibold tabular-nums text-[11px] ${
+                    slicingAnalysis.hasInsufficientSpool ? 'text-rose-400' : 'text-cyan-400'
+                  }`}>
+                    ({slicingAnalysis.spoolConsumptionPercent.toFixed(1)}%)
+                  </span>
+                </div>
+
+                {/* Visual Progress Bar */}
+                <div className="w-28 sm:w-36 md:w-44 lg:w-52 h-3 bg-slate-900 rounded-full border border-slate-700/80 p-0.5 overflow-hidden flex relative shadow-inner shrink-0">
+                  {/* Consumed fill bar */}
+                  <div
+                    className="h-full rounded-full flex overflow-hidden transition-all duration-300"
+                    style={{
+                      width: `${Math.max(4, Math.min(100, slicingAnalysis.spoolConsumptionPercent))}%`,
+                    }}
+                  >
+                    {activeSelectedChannels.map(ch => {
+                      const sharePct = slicingAnalysis.totalFilamentGrams > 0
+                        ? (ch.totalGrams / slicingAnalysis.totalFilamentGrams) * 100
+                        : 0;
+                      return (
+                        <div
+                          key={ch.channelId}
+                          className="h-full"
+                          style={{
+                            width: `${sharePct}%`,
+                            backgroundColor: ch.color,
+                          }}
+                          title={`Slot ${ch.channelId}: ${ch.totalGrams}g`}
+                        />
+                      );
+                    })}
+                  </div>
+                  {/* Subtle capacity marks */}
+                  <div className="absolute inset-y-0 left-1/4 w-px bg-slate-800/80 pointer-events-none" />
+                  <div className="absolute inset-y-0 left-1/2 w-px bg-slate-800/80 pointer-events-none" />
+                  <div className="absolute inset-y-0 left-3/4 w-px bg-slate-800/80 pointer-events-none" />
+                </div>
+
+                {/* Active channel color badges */}
+                <div className="hidden xl:flex items-center -space-x-1 pl-1">
+                  {activeSelectedChannels.map(ch => (
+                    <span
+                      key={ch.channelId}
+                      className="w-2.5 h-2.5 rounded-full border border-slate-900 ring-1 ring-slate-700 shrink-0"
+                      style={{ backgroundColor: ch.color }}
+                      title={`Slot ${ch.channelId}: ${ch.channelName}`}
+                    />
+                  ))}
+                </div>
+
+                <ChevronUp
+                  className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${
+                    showSpoolBreakdown ? 'rotate-180 text-cyan-400' : ''
+                  }`}
+                />
+              </button>
             </div>
           </div>
         </div>
@@ -484,6 +796,19 @@ export default function App() {
       <CreatorInfoModal
         isOpen={isCreatorInfoOpen}
         onClose={() => setIsCreatorInfoOpen(false)}
+        lang={currentLang}
+      />
+
+      {/* Image to 3D Multi-Color Modal */}
+      <ImageTo3DModal
+        isOpen={isImageTo3DOpen}
+        onClose={() => setIsImageTo3DOpen(false)}
+        onModelGenerated={model => {
+          setCurrentModel(model);
+          setSelectedSegmentId(null);
+        }}
+        filaments={filaments.slice(0, maxColors)}
+        printerType={selectedPrinterKey as any}
         lang={currentLang}
       />
     </div>
