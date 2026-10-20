@@ -9,6 +9,16 @@ export interface FilamentChannel {
   spoolGramsRemaining: number;
   slotActive: boolean;
   rfidTag?: string;
+  backupSlotId?: number; // Failover relay slot when spool runs out
+}
+
+export interface ModelSplitConfig {
+  axis: 'x' | 'y' | 'z';
+  cutPositionMm: number;
+  dowelCount: number;
+  dowelRadiusMm: number;
+  dowelLengthMm: number;
+  toleranceMm: number;
 }
 
 export interface PrinterProfile {
@@ -225,6 +235,9 @@ export interface ChannelFilamentConsumption {
   percentOfSpoolUsed: number;
   remainingAfterPrintGrams: number;
   isSufficient: boolean;
+  backupChannelId?: number;
+  backupCapacityGrams?: number;
+  isSufficientWithBackup?: boolean;
 }
 
 export interface SlicingAnalysis {

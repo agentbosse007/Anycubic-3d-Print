@@ -181,6 +181,38 @@ export const FilamentManager: React.FC<FilamentManagerProps> = ({
                     className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-0.5 text-white text-xs font-mono tabular-nums"
                   />
                 </div>
+
+                {/* Spool Backup / Auto-Failover Relay Slot */}
+                <div className="col-span-2 pt-1 border-t border-slate-800/60">
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-slate-300 text-[10px] font-semibold flex items-center gap-1">
+                      <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                      <span>Spool Backup (Runout Relay)</span>
+                    </label>
+                    {slot.backupSlotId && (
+                      <span className="text-[9px] text-emerald-400 font-mono bg-emerald-500/10 px-1.5 py-0.2 rounded border border-emerald-500/30">
+                        Auto-växling aktiv
+                      </span>
+                    )}
+                  </div>
+                  <select
+                    value={slot.backupSlotId || ''}
+                    onChange={e => {
+                      const val = e.target.value ? Number(e.target.value) : undefined;
+                      onUpdateFilament({ ...slot, backupSlotId: val });
+                    }}
+                    className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-white text-[11px] focus:outline-none focus:border-cyan-500"
+                  >
+                    <option value="">Ingen backup (Pausa vid tom spole)</option>
+                    {filaments
+                      .filter(f => f.id !== slot.id && f.id <= maxColors)
+                      .map(f => (
+                        <option key={f.id} value={f.id}>
+                          Slot {f.id}: {f.name} ({f.material} • {f.spoolGramsRemaining}g)
+                        </option>
+                      ))}
+                  </select>
+                </div>
               </div>
             </div>
           );

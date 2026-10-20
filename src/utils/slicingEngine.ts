@@ -360,6 +360,10 @@ export function analyzeMultiMaterialSlicing(
     const remainingAfter = Math.max(0, parseFloat((spoolGrams - chTotalGrams).toFixed(1)));
     const isSufficient = spoolGrams >= chTotalGrams;
 
+    const backupFil = fil.backupSlotId ? filaments.find(f => f.id === fil.backupSlotId) : undefined;
+    const backupCapacityGrams = backupFil ? spoolGrams + (backupFil.spoolGramsRemaining || 0) : spoolGrams;
+    const isSufficientWithBackup = backupCapacityGrams >= chTotalGrams;
+
     return {
       channelId: fil.id,
       channelName: fil.name,
@@ -372,18 +376,21 @@ export function analyzeMultiMaterialSlicing(
       percentOfSpoolUsed: percentUsed,
       remainingAfterPrintGrams: remainingAfter,
       isSufficient,
+      backupChannelId: fil.backupSlotId,
+      backupCapacityGrams,
+      isSufficientWithBackup,
     };
   });
 
   const usedChannels = channelConsumptions.filter(c => activeModelFilamentIds.has(c.channelId));
   const targetChannels = usedChannels.length > 0 ? usedChannels : channelConsumptions;
 
-  const totalSpoolCapacityGrams = targetChannels.reduce((sum, c) => sum + c.spoolGramsRemaining, 0);
+  const totalSpoolCapacityGrams = targetChannels.reduce((sum, c) => sum + (c.backupCapacityGrams || c.spoolGramsRemaining), 0);
   const totalConsumptionOfSelected = targetChannels.reduce((sum, c) => sum + c.totalGrams, 0);
   const spoolConsumptionPercent = totalSpoolCapacityGrams > 0
     ? parseFloat(((totalConsumptionOfSelected / totalSpoolCapacityGrams) * 100).toFixed(1))
     : 0;
-  const hasInsufficientSpool = targetChannels.some(c => !c.isSufficient);
+  const hasInsufficientSpool = targetChannels.some(c => !c.isSufficient && !c.isSufficientWithBackup);
 
   // Estimated tool change duration on Anycubic ACE Pro: ~38 seconds per change
   const secondsPerToolChange = 38;
