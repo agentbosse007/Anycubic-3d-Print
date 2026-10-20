@@ -108,6 +108,16 @@ export interface MeshSegment {
       | 'fleshy_succulent'
       | 'crystalline_quartz'
       | 'translucent_resin';
+    proceduralTexture?:
+      | 'none'
+      | 'reptile_scales'
+      | 'wood_grain'
+      | 'leather_grain'
+      | 'carbon_fiber'
+      | 'sandstone_granite'
+      | 'matte_pei';
+    textureScale?: number;
+    textureIntensity?: number;
   };
 }
 
@@ -123,6 +133,20 @@ export interface ModelDefinition {
   generatedBy: 'ollama' | 'gemini' | 'preset' | 'image_to_3d';
   sourceImageUrl?: string;
   detectedSubject?: string;
+  globalProceduralTexture?:
+    | 'none'
+    | 'reptile_scales'
+    | 'wood_grain'
+    | 'leather_grain'
+    | 'carbon_fiber'
+    | 'sandstone_granite'
+    | 'matte_pei';
+  reconstructionMode?: 'relief' | '360_watertight' | 'multi_angle';
+  multiAngleViews?: {
+    front?: string;
+    side?: string;
+    back?: string;
+  };
   createdAt: string;
 }
 
@@ -131,11 +155,47 @@ export interface SlicingConfig {
   infillDensity: number; // % (e.g. 15)
   purgeIntoInfill: boolean;
   purgeIntoSupport: boolean;
+  infillPerimeterSafetyWalls: number; // 2 to 5 perimeters to block color show-through
   flushingMultiplier: number; // 0.6x to 1.5x
   wipeTowerX: number;
   wipeTowerY: number;
   wipeTowerWidth: number;
   wipeTowerEnabled: boolean;
+}
+
+export interface PrinterConnectionConfig {
+  protocol: 'anycubic_cloud' | 'moonraker' | 'octoprint';
+  host: string;
+  port: number;
+  apiKey?: string;
+  autoConnect: boolean;
+  printerName: string;
+}
+
+export interface PrinterLiveTelemetry {
+  connected: boolean;
+  state: 'idle' | 'printing' | 'paused' | 'error' | 'offline';
+  nozzleTemp: number;
+  nozzleTarget: number;
+  bedTemp: number;
+  bedTarget: number;
+  printProgress: number; // 0 to 100
+  printTimeElapsedSec: number;
+  printTimeRemainingSec: number;
+  currentLayer: number;
+  totalLayers: number;
+  activeAceSlot: number; // 1 to 8
+  aceProChamberTemp: number; // °C
+  aceProChamberHumidity: number; // %
+  aceSlots: {
+    slotId: number;
+    filamentColor: string;
+    filamentType: string;
+    remainingGrams: number;
+    rfidDetected: boolean;
+    isFeeding: boolean;
+    dryingActive: boolean;
+  }[];
 }
 
 export interface BleedRiskItem {
@@ -176,6 +236,9 @@ export interface SlicingAnalysis {
   modelFilamentGrams: number;
   totalFilamentGrams: number;
   infillSavingsGrams: number;
+  infillPurgeAbsorbedMm3: number;
+  recommendedPerimeterWalls: number;
+  purgeToInfillSavingsPercent: number;
   estimatedPrintMinutes: number;
   estimatedPurgeMinutes: number;
   toolChangeLayers: { layer: number; heightMm: number; fromSlot: number; toSlot: number }[];

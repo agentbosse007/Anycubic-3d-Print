@@ -4,10 +4,11 @@ import type { FilamentChannel, MeshSegment, ModelDefinition, PrinterProfile, Sli
 import { blendHexColors } from '../utils/slicingEngine';
 import { generateOrganicBufferGeometry } from '../utils/organicGeometry';
 import { TRANSLATIONS, type SupportedLanguage } from '../utils/i18n';
+import { getProceduralTexture, ProceduralTextureType, TEXTURE_PRESETS } from '../utils/proceduralTextures';
 import {
   Eye, RotateCcw, Box, Layers, Sparkles, Sliders, AlertTriangle, CheckCircle,
   ShieldAlert, ArrowRight, Zap, Leaf, Activity, Camera, Maximize2, Minimize2,
-  Copy, Check, X, Cpu, Gauge
+  Copy, Check, X, Cpu, Gauge, ChevronDown, Network
 } from 'lucide-react';
 
 interface ThreeViewportProps {
@@ -236,6 +237,11 @@ export const ThreeViewport: React.FC<ThreeViewportProps> = ({
   // Color Bleed Simulation Mode State
   const [bleedSimulationMode, setBleedSimulationMode] = useState<boolean>(false);
   const [simulatedPurgeRatio, setSimulatedPurgeRatio] = useState<number>(slicingConfig.flushingMultiplier || 1.0);
+
+  // Micro-Texture & Purge-to-Infill Visualizer States
+  const [activeMicroTexture, setActiveMicroTexture] = useState<ProceduralTextureType>(model.globalProceduralTexture || 'none');
+  const [isTextureMenuOpen, setIsTextureMenuOpen] = useState<boolean>(false);
+  const [showInfillLattice, setShowInfillLattice] = useState<boolean>(false);
 
   const filamentById = useMemo(
     () => new Map(filaments.map(f => [f.id, f])),
@@ -770,6 +776,14 @@ export const ThreeViewport: React.FC<ThreeViewportProps> = ({
           bumpScale = 0.12;
         }
 
+        // If user has chosen a micro-texture, inject it
+        const texType = (seg.parameters.proceduralTexture || activeMicroTexture || model.globalProceduralTexture || 'none') as ProceduralTextureType;
+        const procBump = getProceduralTexture(texType);
+        if (procBump && !bumpMap) {
+          bumpMap = procBump;
+          bumpScale = 0.045;
+        }
+
         mat = new THREE.MeshPhysicalMaterial({
           color: baseColor,
           roughness: isCrystal ? 0.12 : isMineral ? 0.88 : isSilk ? 0.22 : isGlossy ? 0.28 : isSucculent ? 0.32 : 0.44,
@@ -788,10 +802,15 @@ export const ThreeViewport: React.FC<ThreeViewportProps> = ({
         });
       } else {
         const baseColor = new THREE.Color(fil.color);
+        const texType = (seg.parameters.proceduralTexture || activeMicroTexture || model.globalProceduralTexture || 'none') as ProceduralTextureType;
+        const procBump = getProceduralTexture(texType);
+
         mat = new THREE.MeshStandardMaterial({
           color: baseColor,
           roughness: isSilk ? 0.2 : isTPU ? 0.9 : 0.45,
           metalness: isSilk ? 0.4 : 0.05,
+          bumpMap: procBump || undefined,
+          bumpScale: procBump ? 0.045 : 0,
           wireframe: wireframe,
           clippingPlanes: isSlicingActive && clipPlaneRef.current ? [clipPlaneRef.current] : [],
           clipShadows: true,
@@ -822,11 +841,45 @@ export const ThreeViewport: React.FC<ThreeViewportProps> = ({
       modelGroup.add(mesh);
     });
 
+    // Infill Lattice X-Ray visualization (Proposal 1: Purge-to-infill)
+    if (showInfillLattice) {
+      const infillGroup = new THREE.Group();
+      const density = slicingConfig.infillDensity || 15;
+      const gridSpacing = Math.max(6, 40 / (density / 10));
+      const mx = (model.dimensions.x || 60) * 0.75;
+      const my = (model.dimensions.y || 40) * 0.85;
+      const mz = (model.dimensions.z || 60) * 0.75;
+
+      const infillPoints: THREE.Vector3[] = [];
+      for (let y = 4; y < my; y += 4) {
+        for (let x = -mx / 2; x <= mx / 2; x += gridSpacing) {
+          infillPoints.push(new THREE.Vector3(x, y, -mz / 2));
+          infillPoints.push(new THREE.Vector3(x, y, mz / 2));
+        }
+        for (let z = -mz / 2; z <= mz / 2; z += gridSpacing) {
+          infillPoints.push(new THREE.Vector3(-mx / 2, y, z));
+          infillPoints.push(new THREE.Vector3(mx / 2, y, z));
+        }
+      }
+
+      const infillGeo = new THREE.BufferGeometry().setFromPoints(infillPoints);
+      const infillMat = new THREE.LineBasicMaterial({
+        color: 0x10b981, // Emerald purge absorption
+        transparent: true,
+        opacity: 0.75,
+      });
+      const infillLines = new THREE.LineSegments(infillGeo, infillMat);
+      infillGroup.add(infillLines);
+      modelGroup.add(infillGroup);
+    }
+
     scene.add(modelGroup);
     modelGroupRef.current = modelGroup;
   }, [
     model,
     filaments,
+    activeMicroTexture,
+    showInfillLattice,
     filamentById,
     selectedSegmentId,
     wireframe,
@@ -1013,6 +1066,65 @@ export const ThreeViewport: React.FC<ThreeViewportProps> = ({
           >
             <Sparkles className="w-3.5 h-3.5" />
             <span>Paint</span>
+          </button>
+
+          {/* Micro-Texture Preset Selector */}
+          <div className="relative">
+            <button
+              onClick={() => setIsTextureMenuOpen(!isTextureMenuOpen)}
+              className={`flex items-center gap-1 px-2 py-1 text-xs font-medium rounded transition-colors whitespace-nowrap cursor-pointer ${
+                activeMicroTexture !== 'none'
+                  ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-xs'
+                  : 'text-slate-300 hover:text-white hover:bg-slate-800'
+              }`}
+              title="Välj proceduriell mikrostuktur (Displacement / Bump shader)"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+              <span>Ytstruktur</span>
+              <ChevronDown className="w-3 h-3 text-slate-400" />
+            </button>
+
+            {isTextureMenuOpen && (
+              <div className="absolute top-full right-0 mt-1 w-64 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-2 z-30 flex flex-col gap-1 text-xs">
+                <div className="px-2 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-800">
+                  Proceduriella Ytmönster (Displacement)
+                </div>
+                {TEXTURE_PRESETS.map(tp => (
+                  <button
+                    key={tp.id}
+                    onClick={() => {
+                      setActiveMicroTexture(tp.id);
+                      setIsTextureMenuOpen(false);
+                    }}
+                    className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg text-left transition-colors cursor-pointer ${
+                      activeMicroTexture === tp.id
+                        ? 'bg-amber-500/20 text-amber-300 font-semibold'
+                        : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                    }`}
+                  >
+                    <div>
+                      <div className="text-xs">{tp.nameSv}</div>
+                      <div className="text-[9px] text-slate-500">{tp.category}</div>
+                    </div>
+                    {activeMicroTexture === tp.id && <Check className="w-3.5 h-3.5 text-amber-400" />}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Purge-to-Infill Lattice X-Ray Toggle */}
+          <button
+            onClick={() => setShowInfillLattice(!showInfillLattice)}
+            className={`flex items-center gap-1 px-2 py-1 text-xs font-medium rounded transition-colors whitespace-nowrap cursor-pointer ${
+              showInfillLattice
+                ? 'bg-emerald-500/25 text-emerald-300 border border-emerald-500/50 shadow-sm'
+                : 'text-slate-300 hover:text-white hover:bg-slate-800'
+            }`}
+            title="Visa gitterinfill och hur spolspill absorberas internt i modellen"
+          >
+            <Layers className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Infill Rutter</span>
           </button>
 
           <button

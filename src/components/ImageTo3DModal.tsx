@@ -21,6 +21,7 @@ import {
   PRESET_IMAGES,
   prepareImageBase64,
   generateReliefModelFromImage,
+  generate360WatertightModelFromImage,
   analyzeImageProceduralFallback,
   findNearestFilament,
   type PresetImageItem,
@@ -28,6 +29,7 @@ import {
 } from '../utils/imageTo3D';
 import { normalizeModelDefinition } from '../utils/aiModelParser';
 import { TRANSLATIONS, type SupportedLanguage } from '../utils/i18n';
+import { TEXTURE_PRESETS, ProceduralTextureType } from '../utils/proceduralTextures';
 
 interface ImageTo3DModalProps {
   isOpen: boolean;
@@ -51,11 +53,16 @@ export const ImageTo3DModal: React.FC<ImageTo3DModalProps> = ({
   // Selected Image state
   const [selectedImage, setSelectedImage] = useState<string>(PRESET_IMAGES[0].dataUrl);
   const [selectedImageName, setSelectedImageName] = useState<string>(PRESET_IMAGES[0].name);
+  const [selectedSideImage, setSelectedSideImage] = useState<string | null>(null);
+  const [selectedBackImage, setSelectedBackImage] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState<boolean>(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Workflow Mode
-  const [workflowMode, setWorkflowMode] = useState<'ai' | 'relief'>('ai');
+  // Workflow Mode: 2.5D relief, 360 solid sculpture, multi-angle reconstruction, or AI vision
+  const [workflowMode, setWorkflowMode] = useState<'360_watertight' | 'relief' | 'multi_angle' | 'ai'>('360_watertight');
+
+  // Surface Micro-Texture selection
+  const [proceduralTexture, setProceduralTexture] = useState<ProceduralTextureType>('none');
 
   // AI Guidance Prompt
   const [promptGuidance, setPromptGuidance] = useState<string>('Skapa som naturtrogen 3D-modell med distinkta färgskikt');
@@ -159,7 +166,28 @@ export const ImageTo3DModal: React.FC<ImageTo3DModalProps> = ({
     setStatusText('Initierar bildbearbetning...');
 
     try {
-      if (workflowMode === 'ai') {
+      if (workflowMode === '360_watertight' || workflowMode === 'multi_angle') {
+        setStatusText('Konstruerar sluten 360° volymetrisk skulptur och mappar ACE Pro-färger...');
+        const solidModel = await generate360WatertightModelFromImage(selectedImage, filaments, {
+          widthMm,
+          heightMm,
+          depthMm: maxDepthMm > 35 ? maxDepthMm : 75,
+          prompt: `${promptGuidance || '360° Skulptur'} (${selectedImageName})`,
+          proceduralTexture,
+          sideImage: selectedSideImage || undefined,
+          backImage: selectedBackImage || undefined,
+        });
+        solidModel.sourceImageUrl = selectedImage;
+        solidModel.multiAngleViews = {
+          front: selectedImage,
+          side: selectedSideImage || undefined,
+          back: selectedBackImage || undefined,
+        };
+        setStatusText('360° skulptur validerad och exporterad!');
+        onModelGenerated(solidModel);
+        onClose();
+        return;
+      } else if (workflowMode === 'ai') {
         setStatusText('Analyserar bild med Multimodal AI Vision (Gemini 3.8 Flash)...');
         const { base64, mimeType } = await prepareImageBase64(selectedImage, 768);
 
@@ -182,6 +210,7 @@ export const ImageTo3DModal: React.FC<ImageTo3DModalProps> = ({
               const normalized = normalizeModelDefinition(data, promptGuidance, 'gemini');
               normalized.sourceImageUrl = selectedImage;
               normalized.generatedBy = 'image_to_3d';
+              normalized.globalProceduralTexture = proceduralTexture;
               setStatusText('3D-modell genererad framgångsrikt!');
               onModelGenerated(normalized);
               onClose();
@@ -200,6 +229,7 @@ export const ImageTo3DModal: React.FC<ImageTo3DModalProps> = ({
           `${promptGuidance} ${selectedImageName}`
         );
         fallbackModel.sourceImageUrl = selectedImage;
+        fallbackModel.globalProceduralTexture = proceduralTexture;
         onModelGenerated(fallbackModel);
         onClose();
       } else {
@@ -216,6 +246,7 @@ export const ImageTo3DModal: React.FC<ImageTo3DModalProps> = ({
           prompt: `${promptGuidance || '3D Relief'} (${selectedImageName})`,
         });
         reliefModel.sourceImageUrl = selectedImage;
+        reliefModel.globalProceduralTexture = proceduralTexture;
         setStatusText('3D-relief skapad och validerad för utskrift!');
         onModelGenerated(reliefModel);
         onClose();
@@ -384,39 +415,242 @@ export const ImageTo3DModal: React.FC<ImageTo3DModalProps> = ({
 
               {/* Mode Toggle */}
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
-                  Konverteringsmetod
+                <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center justify-between">
+                  <span>3D-Rekonstruktionsläge</span>
+                  <span className="text-[10px] text-cyan-400 font-mono">Anycubic Kobra 3 Redo</span>
                 </label>
-                <div className="grid grid-cols-2 gap-2 bg-slate-950 p-1 rounded-xl border border-slate-800">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800">
                   <button
                     type="button"
-                    onClick={() => setWorkflowMode('ai')}
-                    className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                      workflowMode === 'ai'
-                        ? 'bg-cyan-600 text-white shadow-sm'
+                    onClick={() => setWorkflowMode('360_watertight')}
+                    className={`flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                      workflowMode === '360_watertight'
+                        ? 'bg-cyan-500 text-slate-950 shadow-md font-bold'
                         : 'text-slate-400 hover:text-slate-200'
                     }`}
                   >
-                    <Wand2 className="w-3.5 h-3.5" />
-                    <span>{t.imageModeAi || 'Multimodal AI-Vision'}</span>
+                    <Box className="w-3.5 h-3.5" />
+                    <span>360° Skulptur</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setWorkflowMode('multi_angle')}
+                    className={`flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                      workflowMode === 'multi_angle'
+                        ? 'bg-cyan-500 text-slate-950 shadow-md font-bold'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    <Eye className="w-3.5 h-3.5" />
+                    <span>Multivinkel</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => setWorkflowMode('relief')}
-                    className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                    className={`flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                       workflowMode === 'relief'
-                        ? 'bg-cyan-600 text-white shadow-sm'
+                        ? 'bg-cyan-500 text-slate-950 shadow-md font-bold'
                         : 'text-slate-400 hover:text-slate-200'
                     }`}
                   >
                     <Layers className="w-3.5 h-3.5" />
-                    <span>{t.imageModeRelief || 'Volumetrisk 3D-Relief'}</span>
+                    <span>2.5D Relief</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setWorkflowMode('ai')}
+                    className={`flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                      workflowMode === 'ai'
+                        ? 'bg-cyan-500 text-slate-950 shadow-md font-bold'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    <Wand2 className="w-3.5 h-3.5" />
+                    <span>AI-Vision</span>
                   </button>
                 </div>
               </div>
 
+              {/* Surface Micro-Texture Selector */}
+              <div className="bg-slate-950/60 p-3 rounded-xl border border-slate-800 flex flex-col gap-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-[11px] font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Proceduriell Ytstruktur (Displacement / Bump)</span>
+                  </label>
+                  <span className="text-[10px] text-slate-400 font-mono">Blender Shaders</span>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                  {TEXTURE_PRESETS.map(preset => (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      onClick={() => setProceduralTexture(preset.id)}
+                      className={`px-2 py-1.5 rounded-lg border text-left transition-all cursor-pointer ${
+                        proceduralTexture === preset.id
+                          ? 'bg-amber-500/20 border-amber-400 text-amber-300 shadow-xs'
+                          : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
+                      }`}
+                    >
+                      <div className="text-[11px] font-medium truncate">{preset.nameSv}</div>
+                      <div className="text-[9px] text-slate-400 truncate">{preset.category}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Multi-Angle Image Dropzones (Only in multi_angle mode) */}
+              {workflowMode === 'multi_angle' && (
+                <div className="bg-slate-850 p-3.5 rounded-xl border border-slate-800 flex flex-col gap-2.5">
+                  <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                    <Eye className="w-3.5 h-3.5 text-cyan-400" />
+                    <span>Multivinkel Vy-inmatning (Syntetiserar komplett 360° sluten mesh)</span>
+                  </span>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="p-2 rounded-lg bg-slate-900 border border-slate-700 flex flex-col items-center text-center">
+                      <span className="text-[10px] font-semibold text-slate-300 mb-1">Framifrån</span>
+                      <img src={selectedImage} alt="Front" className="w-14 h-14 object-cover rounded border border-slate-700" />
+                      <span className="text-[9px] text-emerald-400 mt-1">Aktiv Källbild</span>
+                    </div>
+
+                    <div className="p-2 rounded-lg bg-slate-900 border border-slate-700 flex flex-col items-center text-center">
+                      <span className="text-[10px] font-semibold text-slate-300 mb-1">Sida / Profil</span>
+                      {selectedSideImage ? (
+                        <div className="relative">
+                          <img src={selectedSideImage} alt="Side" className="w-14 h-14 object-cover rounded border border-slate-700" />
+                          <button
+                            type="button"
+                            onClick={() => setSelectedSideImage(null)}
+                            className="absolute -top-1 -right-1 bg-rose-600 rounded-full w-3.5 h-3.5 text-white flex items-center justify-center text-[8px]"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ) : (
+                        <label className="w-14 h-14 border border-dashed border-slate-700 rounded flex flex-col items-center justify-center cursor-pointer hover:border-cyan-500">
+                          <Upload className="w-3.5 h-3.5 text-slate-500" />
+                          <span className="text-[8px] text-slate-500 mt-0.5">Ladda upp</span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={e => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                const reader = new FileReader();
+                                reader.onload = ev => setSelectedSideImage(ev.target?.result as string);
+                                reader.readAsDataURL(file);
+                              }
+                            }}
+                          />
+                        </label>
+                      )}
+                      <span className="text-[9px] text-slate-400 mt-1">{selectedSideImage ? 'Laddad' : 'Valfri'}</span>
+                    </div>
+
+                    <div className="p-2 rounded-lg bg-slate-900 border border-slate-700 flex flex-col items-center text-center">
+                      <span className="text-[10px] font-semibold text-slate-300 mb-1">Baksida</span>
+                      {selectedBackImage ? (
+                        <div className="relative">
+                          <img src={selectedBackImage} alt="Back" className="w-14 h-14 object-cover rounded border border-slate-700" />
+                          <button
+                            type="button"
+                            onClick={() => setSelectedBackImage(null)}
+                            className="absolute -top-1 -right-1 bg-rose-600 rounded-full w-3.5 h-3.5 text-white flex items-center justify-center text-[8px]"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ) : (
+                        <label className="w-14 h-14 border border-dashed border-slate-700 rounded flex flex-col items-center justify-center cursor-pointer hover:border-cyan-500">
+                          <Upload className="w-3.5 h-3.5 text-slate-500" />
+                          <span className="text-[8px] text-slate-500 mt-0.5">Ladda upp</span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={e => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                const reader = new FileReader();
+                                reader.onload = ev => setSelectedBackImage(ev.target?.result as string);
+                                reader.readAsDataURL(file);
+                              }
+                            }}
+                          />
+                        </label>
+                      )}
+                      <span className="text-[9px] text-slate-400 mt-1">{selectedBackImage ? 'Laddad' : 'Valfri'}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Mode Specific Settings */}
-              {workflowMode === 'ai' ? (
+              {workflowMode === '360_watertight' || workflowMode === 'multi_angle' ? (
+                <div className="bg-slate-850 p-4 rounded-xl border border-slate-800 flex flex-col gap-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                      <Box className="w-3.5 h-3.5 text-cyan-400" />
+                      <span>360° Sluten Solid Skulptur (Watertight Manifold)</span>
+                    </span>
+                    <span className="text-[10px] text-emerald-400 font-mono bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                      ACE Pro 4-Färg
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400 leading-relaxed">
+                    Genererar en fullständigt sluten 360-graders volymetrisk mesh (dorsalt skal + ventral buksida + kronaccenter) med en integrerad fasad sockel för 100% bäddadhesion på Kobra 3.
+                  </p>
+
+                  <div className="grid grid-cols-3 gap-3 text-xs">
+                    <div>
+                      <div className="flex justify-between text-slate-400 mb-1">
+                        <span>Bredd (X):</span>
+                        <span className="text-white font-mono">{widthMm} mm</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="60"
+                        max="180"
+                        step="5"
+                        value={widthMm}
+                        onChange={e => setWidthMm(Number(e.target.value))}
+                        className="w-full accent-cyan-500"
+                      />
+                    </div>
+                    <div>
+                      <div className="flex justify-between text-slate-400 mb-1">
+                        <span>Höjd (Y):</span>
+                        <span className="text-white font-mono">{heightMm} mm</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="60"
+                        max="200"
+                        step="5"
+                        value={heightMm}
+                        onChange={e => setHeightMm(Number(e.target.value))}
+                        className="w-full accent-cyan-500"
+                      />
+                    </div>
+                    <div>
+                      <div className="flex justify-between text-slate-400 mb-1">
+                        <span>Djup (Z):</span>
+                        <span className="text-white font-mono">{maxDepthMm > 35 ? maxDepthMm : 75} mm</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="40"
+                        max="160"
+                        step="5"
+                        value={maxDepthMm > 35 ? maxDepthMm : 75}
+                        onChange={e => setMaxDepthMm(Number(e.target.value))}
+                        className="w-full accent-cyan-500"
+                      />
+                    </div>
+                  </div>
+                </div>
+              ) : workflowMode === 'ai' ? (
                 <div className="bg-slate-850 p-4 rounded-xl border border-slate-800 flex flex-col gap-3">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-white flex items-center gap-1.5">

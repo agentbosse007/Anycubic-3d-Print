@@ -45,6 +45,7 @@ const baseConfig: SlicingConfig = {
   infillDensity: 15,
   purgeIntoInfill: false,
   purgeIntoSupport: false,
+  infillPerimeterSafetyWalls: 3,
   flushingMultiplier: 1,
   wipeTowerX: 0,
   wipeTowerY: 0,
@@ -56,11 +57,15 @@ describe('slicingEngine', () => {
   it('calculates luminance for black and white values', () => {
     expect(getLuminance('#000000')).toBe(0);
     expect(getLuminance('#ffffff')).toBe(255);
-    expect(getLuminance('#808080')).toBeCloseTo(128.5, 0);
+    expect(getLuminance('#808080')).toBeCloseTo(128.0, 1);
   });
 
   it('parses hex colors into RGB and luminance values', () => {
-    expect(parseHexColor('#ff0000')).toEqual({ r: 255, g: 0, b: 0, luminance: 76.245 });
+    const red = parseHexColor('#ff0000');
+    expect(red.r).toBe(255);
+    expect(red.g).toBe(0);
+    expect(red.b).toBe(0);
+    expect(red.luminance).toBeCloseTo(76.245, 2);
     expect(parseHexColor('#00ff00').g).toBe(255);
     expect(parseHexColor('#000000').luminance).toBe(0);
   });

@@ -154,6 +154,9 @@ export function analyzeMultiMaterialSlicing(
       modelFilamentGrams: 0,
       totalFilamentGrams: 0,
       infillSavingsGrams: 0,
+      infillPurgeAbsorbedMm3: 0,
+      recommendedPerimeterWalls: 2,
+      purgeToInfillSavingsPercent: 0,
       estimatedPrintMinutes: 0,
       estimatedPurgeMinutes: 0,
       toolChangeLayers: [],
@@ -304,14 +307,27 @@ export function analyzeMultiMaterialSlicing(
 
   // Calculate waste reduction from Infill & Support flushing
   let infillSavingsFactor = 0;
-  if (config.purgeIntoInfill) infillSavingsFactor += 0.38;
-  if (config.purgeIntoSupport) infillSavingsFactor += 0.22;
+  if (config.purgeIntoInfill) {
+    // Infill density scales capacity to absorb purge without bulging
+    infillSavingsFactor += Math.min(0.65, 0.28 + (config.infillDensity / 100) * 0.4);
+  }
+  if (config.purgeIntoSupport) {
+    infillSavingsFactor += 0.22;
+  }
+  infillSavingsFactor = Math.min(0.85, infillSavingsFactor);
+
   const effectivePurgeMm3 = totalPurgeMm3 * (1 - infillSavingsFactor);
+  const infillPurgeAbsorbedMm3 = Math.round(totalPurgeMm3 - effectivePurgeMm3);
+  const purgeToInfillSavingsPercent = totalPurgeMm3 > 0 ? Math.round((infillPurgeAbsorbedMm3 / totalPurgeMm3) * 100) : 0;
+
+  // Recommended outer perimeters to prevent purged color bleed through outer shell
+  const hasCriticalBleed = bleedRisks.some(b => b.bleedSeverity === 'critical');
+  const recommendedPerimeterWalls = hasCriticalBleed ? 4 : bleedRisks.length > 0 ? 3 : 2;
 
   // Filament density: ~1.24 g/cm³ for PLA
   const plaDensity = 0.00124; // g/mm³
   const purgeWasteGrams = parseFloat((effectivePurgeMm3 * plaDensity).toFixed(1));
-  const infillSavingsGrams = parseFloat(((totalPurgeMm3 - effectivePurgeMm3) * plaDensity).toFixed(1));
+  const infillSavingsGrams = parseFloat((infillPurgeAbsorbedMm3 * plaDensity).toFixed(1));
 
   // Rough model volume estimate & per-channel model volume
   let modelVolumeMm3 = 0;
@@ -385,16 +401,78 @@ export function analyzeMultiMaterialSlicing(
     modelFilamentGrams,
     totalFilamentGrams,
     infillSavingsGrams,
+    infillPurgeAbsorbedMm3,
+    recommendedPerimeterWalls,
+    purgeToInfillSavingsPercent,
     estimatedPrintMinutes,
     estimatedPurgeMinutes,
     toolChangeLayers,
     bleedRisks,
-    hasCriticalBleed: bleedRisks.some(b => b.bleedSeverity === 'critical'),
+    hasCriticalBleed,
     channelConsumptions,
     totalSpoolCapacityGrams,
     spoolConsumptionPercent,
     hasInsufficientSpool,
   };
+}
+
+/**
+ * Generates an OrcaSlicer / Anycubic Slicer Next compatible flush volume JSON configuration
+ */
+export function exportOrcaSlicerPurgeMatrix(
+  filaments: FilamentChannel[],
+  multiplier: number = 1.0,
+  purgeIntoInfill: boolean = true
+): string {
+  const activeFilaments = filaments.slice(0, 8);
+  const matrix: number[][] = [];
+
+  for (let i = 0; i < activeFilaments.length; i++) {
+    const row: number[] = [];
+    for (let j = 0; j < activeFilaments.length; j++) {
+      row.push(calculateFlushVolume(activeFilaments[i].color, activeFilaments[j].color, multiplier));
+    }
+    matrix.push(row);
+  }
+
+  const payload = {
+    generator: 'ChromaForge Studio Anycubic Multi-Material Optimizer',
+    version: '2.0',
+    flush_multiplier: multiplier,
+    purge_in_infill: purgeIntoInfill ? 1 : 0,
+    purge_in_prime_tower: 1,
+    filaments: activeFilaments.map(f => ({
+      slot: f.id,
+      name: f.name,
+      color: f.color,
+      material: f.material,
+    })),
+    flush_matrix_mm3: matrix,
+  };
+
+  return JSON.stringify(payload, null, 2);
+}
+
+/**
+ * Generates CSV representation of the flush matrix for spreadsheet import
+ */
+export function exportFlushMatrixCSV(
+  filaments: FilamentChannel[],
+  multiplier: number = 1.0
+): string {
+  const activeFilaments = filaments.slice(0, 8);
+  const headers = ['From \\ To', ...activeFilaments.map(f => `Slot ${f.id} (${f.name})`)];
+  const rows: string[] = [headers.join(',')];
+
+  for (let i = 0; i < activeFilaments.length; i++) {
+    const row = [`Slot ${activeFilaments[i].id} (${activeFilaments[i].name})`];
+    for (let j = 0; j < activeFilaments.length; j++) {
+      row.push(calculateFlushVolume(activeFilaments[i].color, activeFilaments[j].color, multiplier).toString());
+    }
+    rows.push(row.join(','));
+  }
+
+  return rows.join('\n');
 }
 
 /**

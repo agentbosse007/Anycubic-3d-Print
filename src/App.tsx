@@ -16,6 +16,7 @@ import { SegmentInspector } from './components/SegmentInspector';
 import { AnycubicGuideModal } from './components/AnycubicGuideModal';
 import { CreatorInfoModal } from './components/CreatorInfoModal';
 import { ImageTo3DModal } from './components/ImageTo3DModal';
+import { WifiPrintDispatchModal } from './components/WifiPrintDispatchModal';
 
 import {
   Layers,
@@ -38,7 +39,8 @@ import {
   CheckCircle2,
   ChevronUp,
   X,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Wifi
 } from 'lucide-react';
 
 export default function App() {
@@ -67,6 +69,7 @@ export default function App() {
   // 2. Modals & UI States
   const [isCreatorInfoOpen, setIsCreatorInfoOpen] = useState<boolean>(false);
   const [isImageTo3DOpen, setIsImageTo3DOpen] = useState<boolean>(false);
+  const [isWifiPrintOpen, setIsWifiPrintOpen] = useState<boolean>(false);
   const [isLangMenuOpen, setIsLangMenuOpen] = useState<boolean>(false);
   const [externalPrompt, setExternalPrompt] = useState<string>('');
 
@@ -86,6 +89,7 @@ export default function App() {
     infillDensity: 15,
     purgeIntoInfill: true,
     purgeIntoSupport: true,
+    infillPerimeterSafetyWalls: 3,
     flushingMultiplier: 1.0,
     wipeTowerX: printer.wipeTower.x,
     wipeTowerY: printer.wipeTower.y,
@@ -283,6 +287,18 @@ export default function App() {
             <ImageIcon className="w-3.5 h-3.5 text-emerald-400 group-hover:scale-110 transition-transform" />
             <span className="font-semibold tracking-wide text-[11px] sm:text-xs">
               {t.btnImageTo3D || 'Bild till 3D'}
+            </span>
+          </button>
+
+          {/* Wi-Fi Print Dispatch to Kobra 3 */}
+          <button
+            onClick={() => setIsWifiPrintOpen(true)}
+            className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 text-xs text-cyan-300 hover:text-white bg-cyan-950/40 hover:bg-cyan-900/60 rounded-lg border border-cyan-500/40 hover:border-cyan-400 transition-all shadow-sm whitespace-nowrap cursor-pointer group"
+            title="Skicka 3MF direkt till Anycubic Kobra 3 trådlöst via Wi-Fi"
+          >
+            <Wifi className="w-3.5 h-3.5 text-cyan-400 group-hover:scale-110 transition-transform" />
+            <span className="font-semibold tracking-wide text-[11px] sm:text-xs">
+              Wi-Fi Utskrift
             </span>
           </button>
 
@@ -810,6 +826,18 @@ export default function App() {
         filaments={filaments.slice(0, maxColors)}
         printerType={selectedPrinterKey as any}
         lang={currentLang}
+      />
+
+      {/* Direct Wi-Fi Print Dispatch Modal */}
+      <WifiPrintDispatchModal
+        isOpen={isWifiPrintOpen}
+        onClose={() => setIsWifiPrintOpen(false)}
+        model={currentModel}
+        filaments={activeFilaments}
+        printer={printer}
+        slicingConfig={slicingConfig}
+        slicingAnalysis={slicingAnalysis}
+        maxColors={maxColors}
       />
     </div>
   );

@@ -1,6 +1,8 @@
 import JSZip from 'jszip';
 import type { FilamentChannel, MeshSegment, ModelDefinition, SlicingConfig } from '../types';
 import { getOrganicTriangles } from './organicGeometry';
+import { exportOrcaSlicerPurgeMatrix } from './slicingEngine';
+import { generateBlenderShaderNodesForTexture, ProceduralTextureType } from './proceduralTextures';
 
 /**
  * Converts hex color (#RRGGBB) to hex RGBA (#RRGGBBAA) for 3MF basematerial
@@ -233,6 +235,22 @@ ${buildItemsXml}  </build>
 </model>`;
 
   zip.file('3D/3dmodel.model', modelXml);
+  
+  // Embed OrcaSlicer / Anycubic Slicer Next flush matrix config
+  try {
+    const purgeMatrixJson = exportOrcaSlicerPurgeMatrix(filaments, config.flushingMultiplier, config.purgeIntoInfill);
+    zip.file('Metadata/OrcaSlicer_FlushMatrix.json', purgeMatrixJson);
+    zip.file('Metadata/ChromaForge_Optimization.txt', `CHROMAFORGE OPTIMIZATION METRIC
+Model: ${model.name}
+Purge-to-Infill: ${config.purgeIntoInfill ? 'ENABLED' : 'DISABLED'}
+Purge-to-Support: ${config.purgeIntoSupport ? 'ENABLED' : 'DISABLED'}
+Safety Perimeters: ${config.infillPerimeterSafetyWalls || 3}
+Flush Multiplier: ${config.flushingMultiplier}x
+Target Printer: Anycubic Kobra 3 (ACE Pro)
+`);
+  } catch {
+    // Ignore optional metadata error
+  }
 
   return await zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.ms-package.3dmanufacturing-3dmodel+xml' });
 }
@@ -376,13 +394,15 @@ export function generateBlenderPythonScript(
     obj.rotation_euler = (${rx}, ${rz}, ${ry})`;
     }
 
+    const texType = (seg.parameters.proceduralTexture || model.globalProceduralTexture || 'none') as ProceduralTextureType;
+
     return `
     # Component ${idx + 1}: ${seg.name} (Filament Slot ${seg.filamentId})
     ${addMeshCode}
     obj.name = "${seg.name.replace(/[^a-zA-Z0-9_]/g, '_')}_Slot${seg.filamentId}"
     
-    # Assign Material & Color
-    mat = get_or_create_material("Mat_Slot${seg.filamentId}_${fil.name.replace(/[^a-zA-Z0-9_]/g, '_')}", (${r}, ${g}, ${b}, 1.0))
+    # Assign Material & Color (Procedural Texture: ${texType})
+    mat = get_or_create_material("Mat_Slot${seg.filamentId}_${fil.name.replace(/[^a-zA-Z0-9_]/g, '_')}", (${r}, ${g}, ${b}, 1.0), "${texType}")
     if obj.data.materials:
         obj.data.materials[0] = mat
     else:
@@ -407,7 +427,7 @@ export function generateBlenderPythonScript(
 ChromaForge Studio - Blender Automation Script
 Model: ${model.name}
 Target Printer: Anycubic Kobra 3 (ACE Pro 8-Color) & Kobra X
-Optimized for: Multi-material 3MF export with automated material segmentation
+Optimized for: Multi-material 3MF export with automated material segmentation & procedural textures
 
 Instructions:
 1. Open Blender (v3.6+ or v4.x)
@@ -420,12 +440,14 @@ Instructions:
 import bpy
 import math
 
-def get_or_create_material(name, rgba):
+def get_or_create_material(name, rgba, tex_type="none"):
     mat = bpy.data.materials.get(name)
     if mat is None:
         mat = bpy.data.materials.new(name=name)
         mat.use_nodes = True
-        bsdf = mat.node_tree.nodes.get("Principled BSDF")
+        nodes = mat.node_tree.nodes
+        links = mat.node_tree.links
+        bsdf = nodes.get("Principled BSDF")
         if bsdf:
             # Base Color (sRGB)
             if "Base Color" in bsdf.inputs:
@@ -439,6 +461,84 @@ def get_or_create_material(name, rgba):
                 bsdf.inputs["Subsurface"].default_value = 0.15
             if "Coat Weight" in bsdf.inputs:
                 bsdf.inputs["Coat Weight"].default_value = 0.2
+
+            # Procedural Micro-Texture Node Injections
+            if tex_type == "reptile_scales":
+                try:
+                    tc = nodes.new("ShaderNodeTexCoord")
+                    mapping = nodes.new("ShaderNodeMapping")
+                    mapping.inputs["Scale"].default_value = (32.0, 32.0, 32.0)
+                    links.new(tc.outputs["Object"], mapping.inputs["Vector"])
+                    voro = nodes.new("ShaderNodeTexVoronoi")
+                    voro.feature = "SMOOTH_F1"
+                    links.new(mapping.outputs["Vector"], voro.inputs["Vector"])
+                    bump = nodes.new("ShaderNodeBump")
+                    bump.inputs["Strength"].default_value = 0.4
+                    bump.inputs["Distance"].default_value = 0.003
+                    links.new(voro.outputs["Distance"], bump.inputs["Height"])
+                    links.new(bump.outputs["Normal"], bsdf.inputs["Normal"])
+                except Exception:
+                    pass
+            elif tex_type == "wood_grain":
+                try:
+                    tc = nodes.new("ShaderNodeTexCoord")
+                    mapping = nodes.new("ShaderNodeMapping")
+                    mapping.inputs["Scale"].default_value = (10.0, 10.0, 40.0)
+                    links.new(tc.outputs["Object"], mapping.inputs["Vector"])
+                    wave = nodes.new("ShaderNodeTexWave")
+                    wave.wave_type = "RINGS"
+                    wave.inputs["Scale"].default_value = 14.0
+                    wave.inputs["Distortion"].default_value = 3.0
+                    links.new(mapping.outputs["Vector"], wave.inputs["Vector"])
+                    bump = nodes.new("ShaderNodeBump")
+                    bump.inputs["Strength"].default_value = 0.35
+                    bump.inputs["Distance"].default_value = 0.002
+                    links.new(wave.outputs["Color"], bump.inputs["Height"])
+                    links.new(bump.outputs["Normal"], bsdf.inputs["Normal"])
+                except Exception:
+                    pass
+            elif tex_type == "leather_grain":
+                try:
+                    tc = nodes.new("ShaderNodeTexCoord")
+                    voro = nodes.new("ShaderNodeTexVoronoi")
+                    voro.inputs["Scale"].default_value = 50.0
+                    links.new(tc.outputs["Object"], voro.inputs["Vector"])
+                    bump = nodes.new("ShaderNodeBump")
+                    bump.inputs["Strength"].default_value = 0.45
+                    bump.inputs["Distance"].default_value = 0.002
+                    links.new(voro.outputs["Distance"], bump.inputs["Height"])
+                    links.new(bump.outputs["Normal"], bsdf.inputs["Normal"])
+                except Exception:
+                    pass
+            elif tex_type == "carbon_fiber":
+                try:
+                    tc = nodes.new("ShaderNodeTexCoord")
+                    wave = nodes.new("ShaderNodeTexWave")
+                    wave.inputs["Scale"].default_value = 65.0
+                    links.new(tc.outputs["Object"], wave.inputs["Vector"])
+                    bump = nodes.new("ShaderNodeBump")
+                    bump.inputs["Strength"].default_value = 0.5
+                    bump.inputs["Distance"].default_value = 0.0015
+                    links.new(wave.outputs["Color"], bump.inputs["Height"])
+                    links.new(bump.outputs["Normal"], bsdf.inputs["Normal"])
+                    if "Metallic" in bsdf.inputs:
+                        bsdf.inputs["Metallic"].default_value = 0.65
+                except Exception:
+                    pass
+            elif tex_type in ("sandstone_granite", "matte_pei"):
+                try:
+                    tc = nodes.new("ShaderNodeTexCoord")
+                    noise = nodes.new("ShaderNodeTexNoise")
+                    noise.inputs["Scale"].default_value = 120.0 if tex_type == "matte_pei" else 75.0
+                    links.new(tc.outputs["Object"], noise.inputs["Vector"])
+                    bump = nodes.new("ShaderNodeBump")
+                    bump.inputs["Strength"].default_value = 0.25
+                    bump.inputs["Distance"].default_value = 0.001
+                    links.new(noise.outputs["Fac"], bump.inputs["Height"])
+                    links.new(bump.outputs["Normal"], bsdf.inputs["Normal"])
+                except Exception:
+                    pass
+
     return mat
 
 def build_chromaforge_model():

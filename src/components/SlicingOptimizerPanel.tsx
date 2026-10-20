@@ -1,7 +1,26 @@
 import React, { useState } from 'react';
 import type { FilamentChannel, SlicingAnalysis, SlicingConfig } from '../types';
-import { buildFlushMatrix } from '../utils/slicingEngine';
-import { Sliders, CheckSquare, Square, Zap, Info, Clock, Trash2, ArrowRightLeft, Layers, ShieldAlert, AlertTriangle, ArrowRight, CheckCircle } from 'lucide-react';
+import { buildFlushMatrix, exportOrcaSlicerPurgeMatrix, exportFlushMatrixCSV } from '../utils/slicingEngine';
+import {
+  Sliders,
+  CheckSquare,
+  Square,
+  Zap,
+  Info,
+  Clock,
+  Trash2,
+  ArrowRightLeft,
+  Layers,
+  ShieldAlert,
+  ShieldCheck,
+  AlertTriangle,
+  ArrowRight,
+  CheckCircle,
+  Copy,
+  Download,
+  Sparkles,
+  Check
+} from 'lucide-react';
 
 interface SlicingOptimizerPanelProps {
   analysis: SlicingAnalysis;
@@ -19,6 +38,7 @@ export const SlicingOptimizerPanel: React.FC<SlicingOptimizerPanelProps> = ({
   maxColors,
 }) => {
   const [activeTab, setActiveTab] = useState<'overview' | 'matrix' | 'layers' | 'bleed'>('overview');
+  const [copiedMatrix, setCopiedMatrix] = useState<boolean>(false);
   const activeFilaments = filaments.slice(0, maxColors);
   const matrix = buildFlushMatrix(activeFilaments, config.flushingMultiplier);
 
@@ -26,7 +46,30 @@ export const SlicingOptimizerPanel: React.FC<SlicingOptimizerPanelProps> = ({
     onChangeConfig({
       ...config,
       flushingMultiplier: Math.max(1.25, Number((config.flushingMultiplier + 0.2).toFixed(2))),
+      infillPerimeterSafetyWalls: Math.max(3, (config.infillPerimeterSafetyWalls || 3) + 1),
     });
+  };
+
+  const handleCopyOrcaJson = async () => {
+    const jsonStr = exportOrcaSlicerPurgeMatrix(activeFilaments, config.flushingMultiplier, config.purgeIntoInfill);
+    try {
+      await navigator.clipboard.writeText(jsonStr);
+      setCopiedMatrix(true);
+      setTimeout(() => setCopiedMatrix(false), 2000);
+    } catch {
+      // clipboard fallback
+    }
+  };
+
+  const handleDownloadCsv = () => {
+    const csvStr = exportFlushMatrixCSV(activeFilaments, config.flushingMultiplier);
+    const blob = new Blob([csvStr], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Anycubic_Flush_Matrix_${activeFilaments.length}colors.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -210,9 +253,16 @@ export const SlicingOptimizerPanel: React.FC<SlicingOptimizerPanelProps> = ({
                   )}
                 </div>
                 <div>
-                  <div className="font-semibold text-xs text-white">Purge into Infill</div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-semibold text-xs text-white">Purge into Infill (Spol-i-Infill)</span>
+                    {config.purgeIntoInfill && (
+                      <span className="px-1.5 py-0.2 rounded text-[9px] font-mono font-bold bg-emerald-500/20 text-emerald-300">
+                        -{analysis.purgeToInfillSavingsPercent}% Spill
+                      </span>
+                    )}
+                  </div>
                   <div className="text-[11px] text-slate-400 mt-0.5">
-                    Injects transition colors into internal sparse infill patterns (Gyroid/Grid). Saves ~38% purge waste.
+                    Kanaliserar färgövergångar rakt in i gitterinfillet. Sparar {analysis.infillPurgeAbsorbedMm3} mm³ ({analysis.infillSavingsGrams}g) spolspill.
                   </div>
                 </div>
               </button>
@@ -237,11 +287,46 @@ export const SlicingOptimizerPanel: React.FC<SlicingOptimizerPanelProps> = ({
                 <div>
                   <div className="font-semibold text-xs text-white">Purge into Support</div>
                   <div className="text-[11px] text-slate-400 mt-0.5">
-                    Flushes color changes into support towers/trees prior to entering the wipe tower. Saves ~22% purge waste.
+                    Spolar färgskiftningar i stödstrukturer/träd innan munstycket når spilltornet. Sparar ~22% extra.
                   </div>
                 </div>
               </button>
             </div>
+
+            {/* Perimeter Wall Color Bleed Shield */}
+            {config.purgeIntoInfill && (
+              <div className="p-3 bg-slate-950/70 border border-slate-800 rounded-lg flex flex-col gap-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-slate-200 font-semibold flex items-center gap-1.5">
+                    <ShieldCheck className="w-3.5 h-3.5 text-cyan-400" />
+                    <span>Infill-Sköld: Ytterväggar (Perimeters)</span>
+                  </span>
+                  <span className="font-mono text-cyan-400 font-bold">
+                    {config.infillPerimeterSafetyWalls || 3} väggar
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min="2"
+                  max="5"
+                  step="1"
+                  value={config.infillPerimeterSafetyWalls || 3}
+                  onChange={e => onChangeConfig({ ...config, infillPerimeterSafetyWalls: Number(e.target.value) })}
+                  className="w-full accent-cyan-500"
+                />
+                <div className="flex items-center justify-between text-[10px]">
+                  <span className="text-slate-500">2 väggar (tunn)</span>
+                  <span className="text-slate-400">Rekommenderat för denna modell: <strong className="text-white">{analysis.recommendedPerimeterWalls} väggar</strong></span>
+                  <span className="text-slate-500">5 väggar (ogenomskinlig)</span>
+                </div>
+                {(config.infillPerimeterSafetyWalls || 3) < analysis.recommendedPerimeterWalls && (
+                  <div className="text-[10px] text-amber-300 flex items-center gap-1 bg-amber-500/10 p-1.5 rounded border border-amber-500/20">
+                    <AlertTriangle className="w-3 h-3 shrink-0" />
+                    <span>Mörkt spolfilament i infillet kan skina igenom vid &lt;{analysis.recommendedPerimeterWalls} väggar.</span>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Global Flushing Multiplier Slider */}
             <div className="mt-1 pt-2 border-t border-slate-800/80 flex flex-col gap-1.5">
@@ -324,9 +409,31 @@ export const SlicingOptimizerPanel: React.FC<SlicingOptimizerPanelProps> = ({
       {/* TAB 2: FLUSH MATRIX */}
       {activeTab === 'matrix' && (
         <div className="flex flex-col gap-3">
-          <p className="text-slate-400 text-xs">
-            Dynamic transition matrix in mm³. Values indicate filament purged when swapping from Row (From) to Column (To). Dark to light transitions require higher purge volumes.
-          </p>
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+            <p className="text-slate-400 text-xs">
+              Dynamisk övergångsmatris (mm³). Mörk-till-ljus kräver högre spolvolym för ren färg utan missfärgning.
+            </p>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button
+                type="button"
+                onClick={handleCopyOrcaJson}
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-slate-700 text-xs font-semibold transition-all cursor-pointer shadow-xs"
+                title="Kopiera OrcaSlicer / Anycubic Slicer Next JSON flush config"
+              >
+                {copiedMatrix ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                <span>{copiedMatrix ? 'Kopierad JSON!' : 'OrcaSlicer JSON'}</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleDownloadCsv}
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-xs font-semibold transition-all cursor-pointer shadow-xs"
+                title="Ladda ner matris som kalkylarks-CSV"
+              >
+                <Download className="w-3.5 h-3.5 text-slate-400" />
+                <span>CSV</span>
+              </button>
+            </div>
+          </div>
 
           <div className="overflow-x-auto border border-slate-800 rounded-xl bg-slate-950 p-2">
             <table className="w-full border-collapse font-mono text-[11px]">
